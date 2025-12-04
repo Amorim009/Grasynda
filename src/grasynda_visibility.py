@@ -104,28 +104,27 @@ class GrasyndaVisibilityGraph(SemiSyntheticGenerator):
         # Storage for learned patterns
         self.visibility_graphs = {}
         self.degree_distributions = {}
-        self.degree_transitions = {}  # Transition matrices: P(degree_t+1 | degree_t)
-        self.value_degree_map = {}  # Maps degrees to values with those degrees
+        self.degree_transitions = {}  # Transition matrices
+        self.value_degree_map = {}  
     
     def transform(self, df: pd.DataFrame, **kwargs) -> pd.DataFrame:
         """Generate synthetic time series using visibility graphs."""
         
-        # Decompose or use raw
+        # Decompose or not
         if self.use_decomposition:
             df_decomp = self._decompose(df)
-            target_column = self.quantile_on  # 'trend' or 'remainder'
+            target_column = self.quantile_on 
         else:
             df_decomp = df.copy()
             df_decomp['raw_y'] = df_decomp['y']
             target_column = 'raw_y'
         
-        # Step 2: Build visibility graphs and learn patterns
+       
         self._learn_visibility_patterns(df_decomp, target_column)
         
-        # Step 3: Generate synthetic series
+        #Generate synthetic series
         synth_ts_dict = self._generate_synthetic_series(df_decomp, target_column)
         
-        # Step 4: Reconstruct and format
         if self.use_decomposition:
             synth_df = self._reconstruct_decomposed(df_decomp, synth_ts_dict)
         else:
@@ -134,7 +133,7 @@ class GrasyndaVisibilityGraph(SemiSyntheticGenerator):
         return synth_df
     
     def _decompose(self, df: pd.DataFrame) -> pd.DataFrame:
-        """STL decomposition of time series."""
+     
         components = []
         
         for unique_id, group in df.groupby('unique_id'):
@@ -153,14 +152,14 @@ class GrasyndaVisibilityGraph(SemiSyntheticGenerator):
         return pd.concat(components, ignore_index=True)
     
     def _learn_visibility_patterns(self, df: pd.DataFrame, target_column: str):
-        """Build visibility graphs and extract patterns."""
+      
         
         print(f"Building {self.visibility_type} visibility graphs on '{target_column}'...")
         
         for unique_id, group in df.groupby('unique_id'):
             series = group[target_column].values
             
-            # Build visibility graph
+      
             if self.visibility_type == 'horizontal':
                 adj_matrix = VisibilityGraph.horizontal_visibility(series)
             else:
@@ -183,9 +182,7 @@ class GrasyndaVisibilityGraph(SemiSyntheticGenerator):
             self.degree_transitions[unique_id] = self._build_transition_matrix(degrees)
     
     def _create_synthetic_ts(self, df: pd.DataFrame) -> Dict:
-        """
-        Implementation of abstract method from SemiSyntheticGenerator.
-        """
+
         if self.use_decomposition:
             target_column = 'remainder'
         else:
@@ -204,7 +201,7 @@ class GrasyndaVisibilityGraph(SemiSyntheticGenerator):
             series = group[target_column].values
             n = len(series)
             
-            # Use degree matching to generate synthetic series
+            
             synth = self._generate_by_degree_matching(unique_id, n)
             generated_series[unique_id] = pd.Series(synth, index=group.index)
         
@@ -255,10 +252,9 @@ class GrasyndaVisibilityGraph(SemiSyntheticGenerator):
         """
         Generate synthetic series using degree transition matrix.
         
-        Algorithm:
-        1. Start with a random degree from the original distribution
-        2. Use transition matrix to generate next degree probabilistically
-        3. For each degree, select a value that had that degree in the original series
+        random degree from the original distribution
+        transition matrix to generate next degree probabilistically
+        For each degree, select a value that had that degree in the original series
         
         Returns:
             Synthetic time series of specified length
@@ -348,7 +344,7 @@ class GrasyndaVisibilityGraph(SemiSyntheticGenerator):
         return pd.concat(synth_list, ignore_index=True)
     
     def get_graph_statistics(self, uid: str) -> Dict:
-        """Get visibility graph statistics for a time series."""
+  
         if uid not in self.visibility_graphs:
             return {}
         
