@@ -1,0 +1,14 @@
+,MASE,Rank
+Scaling,1.112,1
+TSMixup,1.121,2
+grasynda_vis_degree,1.124,3
+grasynda_uniform,1.125,4
+SeasonalMBB,1.126,5
+Jittering,1.128,6
+MagnitudeWarping,1.13,7
+DBA,1.131,8
+original,1.131,9
+TimeWarping,1.144,10
+grasynda_vis_hybrid,1.151,11
+grasynda_kde,1.153,12
+SeasonalNaive,1.404,13
