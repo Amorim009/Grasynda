@@ -27,37 +27,41 @@ from src.workflow import ExpWorkflow
 
 # Configuration
 
-# Datasets
+# Datasets - ALL RE-ENABLED FOR BASELINE EXPERIMENTS
 
 DATASETS_TO_TEST = [
-    # Already completed (commented out to run only missing datasets):
-    # ('Gluonts', 'm1_monthly'),
-    # ('Gluonts', 'm1_quarterly'),
-    # Missing datasets to run:
+    ('Gluonts', 'm1_monthly'),
+    ('Gluonts', 'm1_quarterly'),
     ('M3', 'Monthly'),
     ('M3', 'Quarterly'),
     ('Tourism', 'Monthly'),
     ('Tourism', 'Quarterly'),
 ]
 
-# Grasynda
+# Baseline (No Augmentation) - NEW!
 
-GRASYNDA_METHODS = [
-    'Grasynda_Uniform',
-    'Grasynda_Vis_Horizontal',
-    'Grasynda_Vis_Natural',
+BASELINE_METHOD = [
+    'Baseline',  # No data augmentation
 ]
 
-# Others
+# Grasynda - ALREADY COMPLETED (COMMENTED OUT)
+
+GRASYNDA_METHODS = [
+    # 'Grasynda_Uniform',
+    # 'Grasynda_Vis_Horizontal',
+    # 'Grasynda_Vis_Natural',
+]
+
+# Others - ALREADY COMPLETED (COMMENTED OUT)
 
 OTHER_METHODS = [
-    'SeasonalMBB',
-    'Jittering',
-    'Scaling',
-    'TimeWarping',
-    'MagnitudeWarping',
-    'TSMixup',
-    'DBA',
+    # 'SeasonalMBB',
+    # 'Jittering',
+    # 'Scaling',
+    # 'TimeWarping',
+    # 'MagnitudeWarping',
+    # 'TSMixup',
+    # 'DBA',
 ]
 
 # Models
@@ -151,11 +155,12 @@ def run_universal_experiments():
     print("=" * 100)
     print(f"\nConfiguration:")
     print(f"  Datasets: {len(DATASETS_TO_TEST)}")
+    print(f"  Baseline Method: {len(BASELINE_METHOD)}")  # NEW
     print(f"  Grasynda Methods: {len(GRASYNDA_METHODS)}")
     print(f"  Other Methods: {len(OTHER_METHODS)}")
     print(f"  Forecasting Models: {len(FORECASTING_MODELS)}")
     print(f"  Training Modes: {len(TRAINING_MODES)}")
-    print(f"\n  Total Experiments: {len(DATASETS_TO_TEST) * (len(GRASYNDA_METHODS) + len(OTHER_METHODS)) * len(FORECASTING_MODELS) * len(TRAINING_MODES)}")
+    print(f"\n  Total Experiments: {len(DATASETS_TO_TEST) * (len(BASELINE_METHOD) + len(GRASYNDA_METHODS) + len(OTHER_METHODS)) * len(FORECASTING_MODELS)}")  # Updated
     print("=" * 100)
     
     all_results = []
@@ -195,32 +200,33 @@ def run_universal_experiments():
             'min_len': min_len,
         }
         
-        # Test all augmentation methods
-        all_methods = GRASYNDA_METHODS + OTHER_METHODS
+        # Test all augmentation methods + BASELINE
+        all_methods = BASELINE_METHOD + GRASYNDA_METHODS + OTHER_METHODS
         
         for method_idx, method_name in enumerate(all_methods):
             print(f"\n  [{method_idx+1}/{len(all_methods)}] Method: {method_name}")
             
             try:
-                # Generate synthetic data
-                if method_name in GRASYNDA_METHODS:
+                # Handle Baseline (no augmentation)
+                if method_name == 'Baseline':
+                    print(f"    No augmentation (baseline)...")
+                    # For baseline, we use train data directly
+                    training_sets = {
+                        'Baseline': train  # No augmentation, just real train data
+                    }
+                # Generate synthetic data for augmentation methods
+                elif method_name in GRASYNDA_METHODS:
                     print(f"    Grasynda...")
                     synth = generate_grasynda_data(method_name, train, freq_int)
-                else:
-                    print(f"    Augmenting...")
-                    synth = generate_other_augmentation_data(
-                        method_name, train, augmentation_params
-                    )
-                
-                # Prepare training sets for both modes
-                if method_name in GRASYNDA_METHODS:
-                    # Grasynda
                     training_sets = {
                         'Train+Real': pd.concat([train, synth]).reset_index(drop=True),
                         'TSTR': synth
                     }
                 else:
-                    # Others
+                    print(f"    Augmenting...")
+                    synth = generate_other_augmentation_data(
+                        method_name, train, augmentation_params
+                    )
                     training_sets = {
                         'Train+Real': synth,  # Combined
                         'TSTR': extract_synthetic_only(synth, train)
@@ -228,8 +234,10 @@ def run_universal_experiments():
                 
                 # Test all forecasting models
                 for model_name in FORECASTING_MODELS:
-                    # Test all training modes
-                    for mode in TRAINING_MODES:
+                    # Test all training modes (or just 'Baseline' for baseline method)
+                    modes_to_test = ['Baseline'] if method_name == 'Baseline' else TRAINING_MODES
+                    
+                    for mode in modes_to_test:
                         experiment_count += 1
                         train_data = training_sets[mode]
                         

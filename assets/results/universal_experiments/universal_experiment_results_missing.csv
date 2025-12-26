@@ -1,0 +1,10 @@
+Dataset,Group,Augmentation_Method,Forecasting_Model,Training_Mode,MASE,Train_Size,Test_Size,Status
+Gluonts,m1_monthly,Baseline,NHITS,Baseline,0.9691795110702515,35232,3744,Success
+Gluonts,m1_monthly,Baseline,MLP,Baseline,0.9316174387931824,35232,3744,Success
+Gluonts,m1_monthly,Baseline,KAN,Baseline,0.9613945484161377,35232,3744,Success
+Gluonts,m1_quarterly,Baseline,NHITS,Baseline,1.0211008787155151,7584,346,Success
+Gluonts,m1_quarterly,Baseline,MLP,Baseline,1.0656681060791016,7584,346,Success
+Gluonts,m1_quarterly,Baseline,KAN,Baseline,1.0130960941314697,7584,346,Success
+M3,Monthly,Baseline,NHITS,Baseline,0.794920175458292,99981,9588,Success
+M3,Monthly,Baseline,MLP,Baseline,0.770798198154233,99981,9588,Success
+M3,Monthly,Baseline,KAN,Baseline,0.7843063226669867,99981,9588,Success

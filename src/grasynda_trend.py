@@ -1,16 +1,3 @@
-"""
-Grasynda Trend Variant
-
-This variant applies the Grasynda quantile-based generation process to the TREND component
-instead of the remainder:
-
-Workflow:
-1. STL decomposition → trend, seasonal, remainder
-2. Differentiate the trend (first-order difference)
-3. Apply Grasynda quantile generation to differentiated trend
-4. Reverse differentiation (cumulative sum) to get synthetic trend
-5. Combine: synthetic_trend + original_remainder + original_seasonal → final synthetic series
-"""
 
 import numpy as np
 import pandas as pd
@@ -50,32 +37,26 @@ class GrasyndaTrend(Grasynda):
         self.alias = 'GrasyndaTrend'
     
     def transform(self, df: pd.DataFrame, **kwargs):
-        """
-        Main transformation pipeline for trend-based generation.
-        """
+
         df_ = df.copy()
         
-        # Step 1: STL decomposition
         df_ = self.decompose_tsd(df_, period=self.period, robust=self.robust)
         
-        # Step 2: Differentiate the trend (add new column)
         df_ = self._differentiate_trend(df_)
         
-        # Step 3: Calculate quantiles on the DIFFERENTIATED trend
         df_['Quantile'] = self._get_quantiles_on_diff_trend(df_)
         
-        # Step 4: Calculate transition matrix based on differentiated trend quantiles
+
         self._calc_transition_matrix(df_)
         if self.ensemble_transitions:
             self.ensemble_transition_mats = self._get_ensemble_transition_mats()
         
-        # Step 5: Generate synthetic differentiated trend
         synth_diff_trend_dict = self._create_synthetic_diff_trend(df_)
         
-        # Step 6: Integrate to get synthetic trend
+        #Integrate to get synthetic trend
         synth_trend_dict = self._integrate_diff_trend(df_, synth_diff_trend_dict)
         
-        # Step 7: Combine synthetic trend with original remainder and seasonal
+        #Combine synthetic trend with original remainder and seasonal
         synth_df = self._postprocess_trend_df(df_, synth_trend_dict)
         
         return synth_df
@@ -90,7 +71,12 @@ class GrasyndaTrend(Grasynda):
             trend = group['trend'].values
             
             # First-order difference: trend[t] - trend[t-1]
-            diff_trend = np.diff(trend, prepend=trend[0])  # prepend first value to maintain length
+            # Instead of prepending trend[0] (which gives 0), we prepend the first difference
+            # to maintain length N and avoid a spike at 0.
+            first_diff = trend[1] - trend[0] if len(trend) > 1 else 0
+            diff_trend = np.diff(trend, prepend=trend[0] - first_diff)
+            
+            # This makes diff_trend[0] = trend[0] - (trend[0] - first_diff) = first_diff
             
             diff_trend_list.append(pd.DataFrame({
                 'unique_id': uid,
@@ -113,10 +99,7 @@ class GrasyndaTrend(Grasynda):
         return quantiles
     
     def _create_synthetic_diff_trend(self, df: pd.DataFrame) -> Dict:
-        """
-        Generate synthetic differentiated trend using quantile-based generation.
-        This is similar to the base _create_synthetic_ts but works on diff_trend.
-        """
+
         quantile_series = self._generate_quantile_series(df)
         generated_diff_trend = {}
         
@@ -126,25 +109,32 @@ class GrasyndaTrend(Grasynda):
             uid_diff_trend = uid_df['diff_trend']
             uid_quantiles = uid_df['Quantile']
             
-            # Store values for each quantile
-            uid_q_vals = {}
+            # Store min/max values for each quantile to define the bin range
+            uid_q_ranges = {}
             for q in range(self.n_quantiles):
                 vals = uid_diff_trend[uid_quantiles == q].values
-                uid_q_vals[q] = vals
+                if len(vals) > 0:
+                    uid_q_ranges[q] = (np.min(vals), np.max(vals))
+                else:
+                    uid_q_ranges[q] = None
             
             synth_diff = np.zeros(len(uid_diff_trend))
             synth_diff[0] = uid_diff_trend.values[0]
             
             for i in range(1, len(uid_quantiles)):
                 current_quantile = quantile_series[uid][i]
-                possible_vals = uid_q_vals.get(current_quantile, [])
+                bin_range = uid_q_ranges.get(current_quantile, None)
                 
-                if len(possible_vals) == 0:
+                if bin_range is None:
                     # No samples - repeat last value
                     synth_diff[i] = synth_diff[i - 1]
                 else:
-                    # Uniform sampling from original differentiated values
-                    sampled_val = np.random.choice(possible_vals)
+                    # Continuous Uniform sampling within the bin range [min, max]
+                    min_val, max_val = bin_range
+                    if min_val == max_val:
+                        sampled_val = min_val
+                    else:
+                        sampled_val = np.random.uniform(min_val, max_val)
                     synth_diff[i] = sampled_val
             
             generated_diff_trend[uid] = pd.Series(synth_diff, index=uid_df.index)
@@ -154,9 +144,7 @@ class GrasyndaTrend(Grasynda):
     def _integrate_diff_trend(self, df: pd.DataFrame, synth_diff_trend_dict: Dict) -> Dict:
         """
         Reverse the differentiation using cumulative sum to get synthetic trend.
-        
-        If diff_trend[t] = trend[t] - trend[t-1], then:
-        trend[t] = trend[0] + sum(diff_trend[1:t+1])
+
         """
         synth_trend_dict = {}
         
@@ -177,9 +165,7 @@ class GrasyndaTrend(Grasynda):
         return synth_trend_dict
     
     def _postprocess_trend_df(self, df: pd.DataFrame, synth_trend_dict: Dict):
-        """
-        Combine synthetic trend with ORIGINAL remainder and seasonal components.
-        """
+
         synth_list = []
         
         for uid, uid_df in df.groupby('unique_id'):
@@ -188,17 +174,13 @@ class GrasyndaTrend(Grasynda):
             # Replace trend with synthetic trend
             uid_df_copy['trend'] = synth_trend_dict[uid].values
             
-            # Keep original remainder and seasonal
-            # (they are already in uid_df_copy)
-            
             synth_list.append(uid_df_copy)
         
         synth_df = pd.concat(synth_list)
         
-        # Reconstruct final y from components
+        # Reconstruct
         synth_df['y'] = synth_df[['trend', 'seasonal', 'remainder']].sum(axis=1)
-        
-        # Clean up and format  
+          
         synth_df = synth_df.drop(columns=['trend', 'seasonal', 'remainder', 'Quantile', 'diff_trend'])
         synth_df['unique_id'] = synth_df['unique_id'].apply(lambda x: f'{self.alias}_{x}')
         synth_df = synth_df[['ds', 'unique_id', 'y']]
