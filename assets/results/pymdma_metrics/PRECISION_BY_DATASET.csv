@@ -1,0 +1,9 @@
+Method,Gluonts_m1_monthly,Gluonts_m1_quarterly,M3_Monthly,M3_Quarterly,Tourism_Monthly,Tourism_Quarterly
+DBA,0.985,1.0,0.997,0.996,1.0,0.995
+GrasyndaE,1.0,1.0,1.0,0.997,0.995,1.0
+Jittering,1.0,1.0,1.0,1.0,1.0,1.0
+MagnitudeWarping,1.0,1.0,0.997,0.994,0.997,1.0
+Scaling,0.998,1.0,1.0,0.994,1.0,0.998
+SeasonalMBB,0.998,1.0,1.0,0.997,0.986,1.0
+TSMixup,0.976,0.902,0.999,0.99,0.841,0.965
+TimeWarping,0.998,1.0,0.999,0.99,0.734,0.977
