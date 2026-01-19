@@ -155,6 +155,13 @@ class GrasyndaUnified(SemiSyntheticGenerator):
                 # Visibility Graph Logic
                 vis_type = self._get_param(component, 'visibility_type')
                 self._learn_visibility_patterns(comp_df, target_col, vis_type)
+                
+                if self._get_param(component, 'ensemble_transitions'):
+                    self.ensemble_transition_mats[component] = self._get_ensemble_visibility_mats(
+                        component=component,
+                        ensemble_size=self._get_param(component, 'ensemble_size')
+                    )
+                
                 synth_dict = self._generate_synthetic_series_vis(comp_df, target_col)
             
             else:
@@ -336,6 +343,64 @@ class GrasyndaUnified(SemiSyntheticGenerator):
             
         return ensemble_mats
 
+    def _get_ensemble_visibility_mats(self, component: str, ensemble_size: int):
+        """Find similar UIDs based on degree transitions and average their transition maps."""
+        uids = list(self.degree_transitions.keys())
+        
+        # 1. Convert probability maps to matrices for distance calculation
+        # Use max degree across all series to define common matrix size
+        all_degs = []
+        for d_t in self.degree_transitions.values():
+            all_degs.extend(d_t['unique'])
+        max_deg = int(max(all_degs)) if all_degs else 20
+        n_d = max_deg + 1
+        
+        mats = {}
+        for uid in uids:
+            mat = np.zeros((n_d, n_d))
+            for deg, trans in self.degree_transitions[uid]['probs'].items():
+                for ndeg, prob in trans.items():
+                    if deg < n_d and ndeg < n_d:
+                        mat[int(deg), int(ndeg)] = prob
+            mats[uid] = mat
+            
+        # 2. Pairwise distances between transition matrices
+        for uid in uids: self.uid_pw_distance[(uid, uid)] = 0.0
+        for uid1, uid2 in combinations(uids, 2):
+            dist = np.linalg.norm(mats[uid1] - mats[uid2])
+            self.uid_pw_distance[(uid1, uid2)] = dist
+            self.uid_pw_distance[(uid2, uid1)] = dist
+            
+        ensemble_mats = {}
+        for uid in uids:
+            uid_dists = pd.Series({other: self.uid_pw_distance[(uid, other)] for other in uids})
+            similar_uids = uid_dists.sort_values().head(ensemble_size).index.tolist()
+            
+            # Average transition probabilities
+            merged_probs = {}
+            all_degrees = set()
+            for u in similar_uids:
+                all_degrees.update(self.degree_transitions[u]['probs'].keys())
+                
+            for deg in all_degrees:
+                deg_trans = {}
+                count = 0
+                for u in similar_uids:
+                    if deg in self.degree_transitions[u]['probs']:
+                        count += 1
+                        for ndeg, prob in self.degree_transitions[u]['probs'][deg].items():
+                            deg_trans[ndeg] = deg_trans.get(ndeg, 0) + prob
+                if count > 0:
+                    total = sum(deg_trans.values())
+                    merged_probs[deg] = {k: v / total for k, v in deg_trans.items()}
+            
+            ensemble_mats[uid] = {
+                'unique': np.unique(list(merged_probs.keys())),
+                'probs': merged_probs
+            }
+            
+        return ensemble_mats
+
     def _generate_quantile_series(self, df: pd.DataFrame, component: str):
         quantile_series = {}
         uids = df['unique_id'].unique().tolist()
@@ -422,13 +487,6 @@ class GrasyndaUnified(SemiSyntheticGenerator):
     # =========================================================================
 
     
-    # ... (Visibility Graph helper methods would go here, 
-    #      I will omit them for brevity in this step unless explicitly requested to fully port VG now.
-    #      Given the user's focus on Trend/Continuous/Hybrid, I will prioritize those.)
-    
-    # Wait, the user asked for "account for all those parameters". 
-    # I should include the VG logic to be complete.
-    
     # (Re-implementing VG logic briefly)
     @staticmethod
     def _horizontal_visibility(series: np.ndarray) -> np.ndarray:
@@ -497,7 +555,13 @@ class GrasyndaUnified(SemiSyntheticGenerator):
 
         for uid, group in df.groupby('unique_id'):
             n = len(group)
-            trans = self.degree_transitions[uid]
+            
+            # Use ensemble if available
+            if base_component in self.ensemble_transition_mats and uid in self.ensemble_transition_mats[base_component]:
+                trans = self.ensemble_transition_mats[base_component][uid]
+            else:
+                trans = self.degree_transitions[uid]
+                
             curr_deg = np.random.choice(self.degree_distributions[uid])
             
             synth_vals = np.zeros(n)
