@@ -40,12 +40,16 @@ class LoadDataset:
 
     @staticmethod
     def prune_df_by_size(df: pd.DataFrame, min_n_instances: int):
-        large_ts = df['unique_id'].value_counts() >= min_n_instances
-        large_ts_uid = large_ts[large_ts].index.tolist()
+        if min_n_instances is None:
+            return df
 
-        df = df.query('unique_id== @large_ts_uid').reset_index(drop=True)
-
-        return df
+        keep_ids = (
+            df.groupby('unique_id')
+            .size()
+            .loc[lambda s: s >= min_n_instances]
+            .index
+        )
+        return df[df['unique_id'].isin(keep_ids)].reset_index(drop=True)
 
     @staticmethod
     def sample_first_uids(df: pd.DataFrame, n_uid: int):
@@ -110,3 +114,4 @@ class LoadDataset:
         test_df = pd.concat(test_l).reset_index(drop=True)
 
         return train_df, test_df
+

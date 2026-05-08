@@ -32,7 +32,7 @@ class TourismDataset(LoadDataset):
     }
 
     frequency_pd = {
-        'Quarterly': 'QS',
+        'Quarterly': 'QE',
         'Monthly': 'MS'
     }
 

@@ -14,7 +14,7 @@ class GluontsDataset(LoadDataset):
 
     horizons_map = {
         'm1_quarterly': 2,
-        'm1_monthly': 8,
+        'm1_monthly': 12,  # Updated to 12 for systematic evaluation
         'nn5_weekly': 12,
         'electricity_weekly': 12,
         'australian_electricity_demand': 12,
@@ -30,7 +30,7 @@ class GluontsDataset(LoadDataset):
 
     context_length = {
         'm1_quarterly': 4,
-        'm1_monthly': 12,
+        'm1_monthly': 24,  # Updated to 24 for systematic evaluation (2x horizon)
         'nn5_weekly': 26,
         'electricity_weekly': 26,
         'australian_electricity_demand': 26,

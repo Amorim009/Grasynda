@@ -1,0 +1,1520 @@
+
+
+--- PAGE 1 ---
+Diﬀerentially Private Aggregation of Distributed Time-Series with
+Transformation and Encryption
+Vibhor Rastogi Suman Nath
+Abstract
+We propose the ﬁrst diﬀerentially private aggregation algorithm for distributed time-series data that
+oﬀers good practical utility without any trusted server. This addresses two important challenges in
+participatory data-mining applications where (i) individual users wish to publish temporally correlated
+time-series data (such as location traces, web history, personal health data), and (ii) an untrusted third-
+party aggregator wishes to run aggregate queries on the data.
+To ensure diﬀerential privacy for time-series data despite the presence of temporal correlation, we
+propose the Fourier Perturbation Algorithm (FPA k). Standard diﬀerential privacy techniques perform
+poorly for time-series data. To answer n queries, such techniques can result in a noise of Θ( n) to each
+query answer, making the answers practically useless if n is large. Our FPA k algorithm perturbs the
+Discrete Fourier Transform of the query answers. For answering n queries, FPAk improves the expected
+error from Θ( n) to roughly Θ( k) where k is the number of Fourier coeﬃcients that can (approximately)
+reconstruct all the n query answers. Our experiments show that k ≪ n for many real-life data-sets
+resulting in a huge error-improvement for FPA k.
+To deal with the absence of a trusted central server, we propose the Distributed Laplace Perturbation
+Algorithm (DLPA) to add noise in a distributed way in order to guarantee diﬀerential privacy. To the
+best of our knowledge, DLPA is the ﬁrst distributed diﬀerentially private algorithm that can scale with
+a large number of users: DLPA outperforms the only other distributed solution for diﬀerential privacy
+proposed so far, by reducing the computational load per user from O(U ) to O(1) where U is the number
+of users.
+1 Introduction
+The ever increasing instrumentation of the physical and the virtual world has given us an unprecedented op-
+portunity to collect useful data from diverse sources and to mine it for understanding important phenomena.
+Consider the following examples of participatory data mining applications .
+E1: In participatory sensing applications such as CarTel [16], BikeNet [8], PEIR [26], WeatherUn-
+derground1, participants contribute various time-series data, e.g., their current locations, speeds, weather
+information, images, etc. These data can be aggregated and mined for useful information such as community
+interests (e.g., popular places), congestion patterns in roads, micro-weather, etc.
+E2: A Web browser can install plug-ins to monitor users’ browsing behaviors such as the numbers of
+diﬀerent types of web pages a user visits, the types of products he buys from online stores, etc. Historical
+data from such plug-ins can be aggregated to understand user behaviors for improving search results or for
+better targeted advertisement delivery [14].
+E3: Health-care applications such as Microsoft HealthVault 2 and Google Health 3 allow users to period-
+ically upload data such as their weights, occurrences of diseases, amounts of exercise, food and drug intake,
+etc. PIER [26] allows individual users to store such data locally in personal data vaults . Such data can be
+mined in combination to understand disease outbreaks, distribution of weights, relationship of weight gain
+and drug intake, etc.
+1http://www.weatherunderground.com
+2http://www.healthvault.com
+3https://www.google.com/health
+1
+
+
+--- PAGE 2 ---
+Centralized Distributed
+Relational data
+E.g., [7, 15, 28]
+Inaccurate for long time-series
+query sequences
+E.g., [6, 9, 12, 29]
+Either ineﬃcient or inaccurate [9] for a
+large number of users
+Time-series data E.g., [11, 22]
+No formal privacy guarantees
+This paper
+Accurate & eﬃcient answers for time-series
+query sequences under diﬀerential privacy
+Table 1: The design space and existing works
+As the above examples suggest, aggregate statistics computed from data contributed by a large number
+of individual participants can be quite useful. However, data owners or publishers may not be always willing
+to reveal the true values due to various reasons, most notably privacy considerations. The goal of our work
+is to enable third parties to compute useful aggregates over, while guaranteeing the privacy of, the data from
+individual publishers.
+A widely employed and accepted approach for partial information hiding is based on random perturbation,
+which introduces uncertainty about individual values. Prior work has shown how to perturb relational
+data for useful aggregation [7, 9, 20, 27]. However, participatory data mining applications have two unique
+characteristics that make existing privacy mechanisms inadequate for these applications.
+• Time-series data: The applications generate time series numerical or categorical data. Data at successive
+timestamps from the same source can be highly correlated.
+• Distributed sources: Data publishers may not trust any single third party to see their true data. This
+means, the querier needs to be able to compute useful aggregates without seeing the true data values.
+The above characteristics make most existing privacy solutions, which assume relational data with negligible
+correlations across tuples [9, 20, 27] or existence of a central trusted entity for carefully introducing noise [7,
+15, 28], inadequate for our target applications (as summarized in Table 1).
+Thus, to realize widespread adoption of participatory data mining applications, the ﬁrst challenge that
+one needs to address is to ensure privacy for time-series data. One factor that makes it challenging is the
+strong correlation among successive values in the series. This correlation makes answers to diﬀerent queries
+over time-series data to also become correlated, e.g. a sequence of queries computing the average weight of
+a community at successive weeks.
+One possible way for achieving privacy is to perturb the answers to such queries independently of one
+another, thereby ensuring that even revealing a few true answers does not help infer anything about the
+perturbation of other answers. However, [22] pointed out that if the time-series exhibit certain patterns,
+then independent perturbation of query answers can be distinguished from the original answers and ﬁltered
+out. Authors in [11, 22] consider perturbing time series data to defend against several privacy attacks, but
+they do not provide any formal privacy guarantee, without which data owners may not publish sensitive
+data in the fear of unforeseen privacy attacks.
+On the other hand, formal privacy guarantees like diﬀerential privacy that work well for relational data,
+seem too hard to achieve for time series data. For instance, standard diﬀerentially private techniques [7] can
+result in a noise of Θ( n) to each query answer, where n is the number of queries to answer, making the query
+answers practically useless if a long sequence of queries is to be answered.
+The second challenge arises from the absence of a trusted aggregator. Most previous works assume that
+a trusted aggregator, who has access to the raw data, computes target functions on the data and then
+perturbs the results [7,20,27]. In the absence of a trusted aggregator, users need to perturb their data before
+publishing it to the aggregator [9]. However, if users perturb data independently, the noise variance in the
+perturbed estimate grows linearly with the number of users, reducing the utility of the aggregate information.
+To improve utility, cryptographic techniques like Secure Multiparty Computation [6, 12, 29] can be used to
+compute accurate perturbed estimates in a distributed setting. However the computational performance of
+such cryptographic techniques does not scale well with a large number of users.
+2
+
+
+--- PAGE 3 ---
+Figure 1: System Model ( U users with data I1, . . . , IU . The aggregator issues recurring query Q =
+Q1, . . . ,Qn. No trusted server has I = I1 ∪ I2 . . . ∪ IU to evaluate Q(I))
+In this paper, we address these two challenges of distributed time-series data. We use the state-of-the-art
+diﬀerential privacy as the privacy requirement, and make the following contributions:
+▶ To answer multiple queries over time-series data under diﬀerential privacy, we propose the FPA k
+algorithm that perturbs the Discrete Fourier Transform (DFT) of the query answers. For answering n
+queries, FPA k improves the error from Θ( n) (error of standard diﬀerential privacy techniques) to roughly
+Θ(k) where k is the number of DFT coeﬃcients that can (approximately) reconstruct all the n query
+answers. Our experiments show that a small k ≪ n is suﬃcient for many real-life datasets, resulting in
+a huge error-improvement for FPA k. To the best of our knowledge, FPA k is the ﬁrst diﬀerentially private
+technique (unlike [11, 22]) that oﬀers practical utility for time-series data.
+▶ We propose the DLPA algorithm that adds noise in a distributed way for providing diﬀerential privacy.
+To the best of our knowledge, DLPA is the ﬁrst distributed diﬀerentially private algorithm that scales with
+a large number of users: DLPA outperforms the only other proposed distributed algorithm [6], by reducing
+the computational load per user from O(U ) to O(1) where U is the number of users.
+▶ Our distributed solution combines the FPA k and DLPA algorithms to get the accuracy beneﬁts of
+the former and the scalability of the latter. We empirically evaluate our solution over three real time-series
+datasets, namely, GPS traces , daily body-weight readings , and traﬃc volumes . Our experiments show that
+our solution improves accuracy of query answers by orders of magnitude and also scales well with a large
+number of users.
+We believe that our work is an important ﬁrst step towards practical participatory data mining appli-
+cations. We have implemented some of our techniques in a real online participatory sensing application,
+which has been publicly available for last three years with several hundreds data publishers. Our privacy
+techniques now allow users to publish private data without revealing the true values and our application to
+compute useful aggregates over private data.
+2 Preliminaries
+2.1 Problem Setup and System Model
+Motivated by the participatory applications in Section 1, we consider a system model as shown in Figure 1.
+The system has two types of parties involved: a set of U users and an aggregator. The ﬁgure shows U
+users locally storing their personal weight time-series data. We will use the weight time-series as a running
+example throughout the paper. In general, we model each user u’s data as a (uni- or multi-variate) time
+series data, and denote it as Iu. We also denote I = I1 ∪ I2 . . . ∪ IU the combined time-series data of all
+users. There is no trusted central server, and hence I is never computed. The aggregator, however, wishes
+to compute aggregate queries over I.
+Types of queries . An aggregate query can be a snapshot query that returns a single number, e.g., the
+current average weight over all users. A query can also be recurring and ask for periodic answers, e.g.,
+3
+
+
+--- PAGE 4 ---
+the average weight of all users computed once every month of the year. We model a recurring query as a
+sequence of queries Q = {Q1, . . . ,Qn}where each Q i is a snapshot query. We denote Q i(I) the value of the
+snapshot query Q i on input I, and Q(I) the vector {Q1(I), . . . ,Qn(I)}.
+A recurring query can be historical that focuses on past data only, or real-time that runs on data as it
+arrives. The data-mining applications we consider are primarily concerned with historical recurring queries,
+and we develop new algorithms to answer them accurately. Real-time queries are supported only as a
+sequence of snapshot queries.
+Distributed Computation. If a query Q contains predicates on public static attributes, it can be forwarded
+only to users satisfying the predicates. Otherwise, Q needs to be forwarded to all users. Upon receiving the
+query Q, a user evaluates Q on his own time series, Iu, perturbs the result, and sends the perturbed results
+back to the aggregator. The aggregator combines the perturbed results from all users to produce the ﬁnal
+result.
+A prerequisite for such a distributed system is that the true query answer, Q( I), is computable distribut-
+edly. Of all such queries, we consider only queries of the general form Q( I) = ∑
+u fu(Iu), where fu is an
+arbitrary function that maps user u’s data, Iu, to numbers. 4 Such queries, called aggregate-sum queries, are
+quite general, and as explained in [3], are powerful tools for learning and statistical analysis: many algorithms
+like correlation, PCA, SVD, decision tree classiﬁcation, etc. can be implemented using only aggregate-sum
+queries as a primitive. Queries not included in this class are queries that require a non-sum function to be
+evaluated collectively over multiple users’ data (e.g., aggregate-max or min queries).
+Attack Model . We allow both users and the aggregator to be malicious. A malicious user can be of two
+kinds: (i) Liar: a user who lies about his values, but otherwise follows the protocol correctly, or (ii) Breaker:
+a user who breaks the protocol, e.g., sends wrong messages. A malicious aggregator can break the protocol.
+In addition, it can collude with other malicious users.
+To ensure privacy for users, we make a ﬂexible assumption that at least a fraction of users (e.g., a
+majority) are honest. The lower bound h of the number of honest users is known a priori during deciding
+the noise generation parameters of the system. Remaining users and the aggregator can be arbitrarily
+malicious. (Similar assumption is generally made in cryptographic solutions.) The assumption is practical
+and ﬂexible—for a user to know that his true values will remain private, he only needs to know that at least
+a certain fraction of other users are honest; he does not need to trust any single entity s.a. the aggregator.
+On the other hand, to ensure a good utility guarantee for the aggregator, we assume that the aggregator
+queries a set of users that it generally trusts. Of the users the aggregator chooses to query, there can be
+at most l liars ( l is small) and the remaining users are either honest or colluding/collaborating with the
+aggregator. There is fundamentally no way to ensure good utility if a large number of users lie about their
+data.The same is true if even a single user introduces an arbitrarily large noise. So we assume that there are
+no breakers: in practice, this can be arranged by ensuring that users’ messages sent to the aggregator are
+generated and digitally signed by a trusted software implementing the protocol. 5
+In summary, our privacy guarantees hold even if a large number of users are malicious. This is crucial to
+make new privacy-aware users feel comfortable to join the system. Our utility guarantees hold if a small ( < l)
+number of users lie and try to disrupt the ﬁnal aggregate. This leaves the responsibility to the aggregator
+for choosing a good set of users to query. For example, if the aggregator can identify a malicious user (e.g.,
+via some out-of-band mechanism), it can blacklist the user and exclude him from its queries. Our attack
+model is stronger than many previous techniques [12] that use the honest-but-curious model and disallow
+malicious agents.
+Privacy Goals . We aim to enable the aggregator to estimate answers to aggregate queries. At the same
+time, an aggregator should not learn anything more, other than the aggregate answer, about honest individual
+users. Moreover, no user should learn anything about the values of other honest users, even if he colludes
+with the aggregator or other malicious users. We formalize our privacy requirement using diﬀerential privacy,
+which we discuss next.
+4Our techniques can support arbitrary queries if run on a centralized server.
+5Many software security systems rely on trusted software, for instance the clients’ antivirus software, to work with untrusted
+clients [14].
+4
+
+
+--- PAGE 5 ---
+2.2 Privacy Deﬁnition and Background
+We now discuss diﬀerential privacy [5] that we use as our privacy deﬁnition and also review the standard
+perturbation technique [7] used for achieving diﬀerential privacy.
+Diﬀerential Privacy. Informally, an algorithm is diﬀerentially private if its output is insensitive to changes
+in the data Iu of any single user u. This provides privacy because if similar databases, say diﬀering in the
+data of one user, produce indistinguishable outputs, then the adversary cannot use the output to infer any
+single user’s data. To formalize this notion, denote I = I1 ∪ I2 . . . ∪ IU the combined data form U users and
+nbrs(I) the data obtained from adding/removing one user’s data from I, i.e. nbrs(I) consists of I ′ such that
+either I ′ = I ∪ Iu for u /∈ {1, . . . , U}or I ′ = I − Iu for some u ∈ {1, . . . , U}.
+Deﬁnition 2.1 (ϵ-diﬀerential privacy [5]) . Denote A(I) the output of an algorithm A on input data I. Then
+A is ϵ-diﬀerentially private if all I, I ′ such that I ′ ∈ nbrs(I), and any output x, the following holds:
+P r[A(I) = x] ≤ eϵP r[A(I ′) = x]
+where P r is a probability distribution over the randomness of the algorithm.
+Query Sensitivity . We now look at a standard technique proposed by Dwork et al. [7] for diﬀerential
+privacy. It can be used to answer any query whether it is just a single snapshot query, Q i, or a recurring
+query sequence, Q = Q 1, . . . ,Qn.
+The technique works by adding random noise to the answers, where the noise distribution is carefully
+calibrated to the query. The calibration depends on the query sensitivity—informally, the maximum amount
+the query answers can change given any change to a single user’s data Iu. If Q is a query sequence, Q(I) and
+Q(I ′) are each vectors. Sensitivity then measures the distance between the two vectors. This is typically
+done using the L1 distance metric, denoted as |Q(I) − Q(I ′)|1, that measures the Manhattan distance∑
+i |Qi(I) − Qi(I ′)|between these vectors. In this paper, we also use the L2 distance metric, denoted as
+|Q(I) − Q(I ′)|2 that measures the Euclidean distance
+√∑
+i(Qi(I) − Qi(I ′))2.
+Deﬁnition 2.2 (Sensitivity [7]) . Let Q be any query sequence. For p ∈ { 1, 2}, the Lp sensitivity of Q,
+denoted ∆p(Q), is the smallest number such that for all I and I ′ ∈ nbrs(I),
+|Q(I) − Q(I ′)|p ≤ ∆p(Q)
+For a single snapshot query Q i, the L1 and L2 sensitivities are the same, and we write ∆(Qi) = ∆ 1(Qi) =
+∆2(Qi).
+Example 2.1. Consider a query Q counting the number of users whose weight in month 1 is greater than
+200 lb. Then ∆(Q) is simply 1 as Q can diﬀer by at most 1 on adding/removing a single user’s data. Now
+consider Q = Q1, . . . ,Qn, where Q i counts users whose weight in month i is greater than 200 lb. Then ∆1(Q)
+is n (for the pair I,I ′ which diﬀer in a single user having weight > 200 in each month i) and ∆2(Q) = √n (for
+the same pair I,I ′).
+Laplace Perturbation Algorithm (LP A) . To guarantee diﬀerential privacy in presence of a trusted
+server, [7] proposes the LPA algorithm that adds suitably-chosen noise to the true answers. The noise is
+generated according to the Laplace distribution. Denote Lap(λ) a random variable drawn from the Laplace
+distribution with PDF: P r(Lap(λ) = Z) = 1
+2λ e−ϵ|Z|/λ. Lap(λ) has mean 0 and variance 2 λ2. Also denote
+Lapn(λ) to be a vector of n independent Lap(λ) random variables.
+The LPA algorithm takes as input a query sequence Q and parameter λ controlling the Laplace noise.
+LPA ﬁrst computes the true answers, Q(I), exactly and then perturbs the answers by adding independent
+Lap(λ) noise to each query answer in Q(I). More formally, it computes and outputs ˜Q = Q(I) + Lapn(λ).
+Diﬀerential privacy is guaranteed if the parameter λ of the Laplace noise is calibrated according to the L1
+sensitivity of Q. The following theorem shown in [7] formalizes this intuition.
+Theorem 2.1 (Privacy [7]). LPA(Q, λ) is ϵ-diﬀerentially private for λ = ∆ 1(Q)/ϵ.
+5
+
+
+--- PAGE 6 ---
+Analyzing accuracy . To analyze the accuracy of the perturbed estimates returned by an algorithm, we
+quantify their error in the following way.
+Deﬁnition 2.3 (Utility). Let A(Q) be an algorithm that returns a perturbed estimate ˜Q = ˜Q1, . . . , ˜Qn for an
+input sequence Q = Q1, . . . ,Qn. We denote errori(A) = EA|˜Qi − Qi(I)|the expected error in the estimate
+of the ith query Q i. Here EA is the expectation taken over the possible randomness of A. Also denote
+error(A) =
+√∑n
+i=1 errori(A)2 the total L2 error between Q and ˜Q.
+For example, errori(LPA) = E|˜Qi − Qi|= E|Lap(λ)|= λ. Next we discuss the utility of the LPA
+algorithm while satisfying ϵ-diﬀerential privacy.
+Theorem 2.2 (Utility [7]) . Fix λ = ∆ 1(Q)/ϵ so that LPA (Q, λ) is ϵ-diﬀerentially private. Then for all
+i ∈ {1, . . . , n}, errori(LPA) = ∆ 1(Q)/ϵ.
+Example 2.2. Recall the recurring query Q of Eg. 2.1 that counts users having weight > 200 in each month
+i = {1, . . . , n}. Then ∆1(Q) = n and LPA gives an errori(LPA) = n/ϵ in each query Q i for ϵ-diﬀerential
+privacy. Also, the total L2 error is error(LPA) =
+√∑n
+i=1 n2/ϵ2 = n3/2/ϵ
+3 Sketch of our solution
+Before discussing our solution for diﬀerential privacy over distributed time-series data, we provide an out-
+line for it in this section. Our solution uses several existing primitives including Discrete Fourier Trans-
+form (DFT), homomorphic encryption (that allows aggregation of encrypted values without decryption),
+and threshold encryption (that requires a threshold number of users for decryption). We will review these
+techniques in Sections 4 and 5.
+Our solution for answering a query sequence Q of n queries consists of the following two protocol stages.
+The ﬁrst stage is a method to improve the accuracy of query answers and is described using a trusted central
+server. The second stage is then used to obtain a distributed solution.
+1) F ourier Perturbation Algorithm (FP A k). To answer Q with small error under diﬀerential privacy,
+we design the FPAk algorithm. FPA k is based on compressing the answers, Q(I), of the query sequence using
+an orthonormal transformation. Intuitively, this means ﬁnding a k-length query sequence Fk = F k
+1, . . . ,Fk
+k,
+where k ≪ n, such that the answers, Fk(I), can be used to approximately compute Q(I). Then we can
+perturb Fk(I) instead of Q(I) using a lower noise (the noise actually reduces by a factor of n/k) while
+preserving diﬀerential privacy. An additional error creeps in since Fk(I) may not be able to reconstruct Q(I)
+exactly, but for the right choice of Fk, this reconstruction error is signiﬁcantly lower than the perturbation
+error caused by adding noise directly to Q(I). A good Fk can be found using any orthonormal transformation
+and we use the Discrete Fourier Transform (DFT) in our algorithm. How to perturb the DFT query sequence
+Fk to ensure diﬀerential privacy is an important challenge that distinguishes our solution from other Fourier-
+based perturbation approaches [22]. We discuss this in detail in Sec. 4.
+2) Distributed LPA (DLPA) . To answer an aggregate-sum query sequence Q distibutedly under dif-
+ferential privacy, we propose the DLPA algorithm, a distributed version of the LPA algorithm discussed in
+Sec. 2.2. Our complete solution comprises of using FPA k for improving accuracy together with DLPA for
+distributed noise-addition. We describe how they are combined in a moment, but ﬁrst we explain the DLPA
+algorithm. We explain DLPA for a single aggregate-sum query Q: the generalization to the sequence Q
+is straight-forward and just requires n separate invocations, once for each query Q i in Q. Since Q is an
+aggregate-sum query, Q( I) = ∑U
+u=1 fu(Iu) where the function fu maps user u’s data to numbers. Denote
+xu = fu(Iu), so that Q( I) = ∑U
+u=1 xu.
+The basic protocol is based on threshold homomorphic encryption and is shown in Fig. 2. To perturb
+Q(I) = ∑U
+u=1 xu, each user u adds a share of noise, nu, to his private value xu. To keep the estimation
+error small, the noise shares are chosen such that ∑U
+u=1 nu is suﬃcient for diﬀerential privacy, but nu alone
+is not suﬃcient: thus the value xu + nu can not directly be sent to the aggregator. To address this, the user
+6
+
+
+--- PAGE 7 ---
+Figure 2: Basic Distributed Protocol (homomorphic property exploited to aggregate users’ encryption & threshold
+property to combine users’ decryption shares)
+u computes encryptions of xu and nu and sends it to the aggregator. Due to encryption, the aggregator
+can not learn anything about xu. However, using the homomorphic property, it can compute the encryption
+of the sum of all received values from all users thereby getting an encryption E of ˜Q = ∑
+u(xu + nu).
+This encryption is then sent back to all users who use the threshold property to compute their respective
+decryption shares. Finally, the decryption shares are sent to the aggregator who combines them to compute
+the ﬁnal decryption. The end result is a noisy diﬀerentially private estimate ˜Q of Q( I).
+There are two challenges with the basic protocol described above. Firstly, the noise shares have to be
+generated in a way so that their sum is suﬃcient for diﬀerential privacy. Secondly, the aggregator can be
+malicious: the distributed protocol requires the aggregator to compute an encryption E of ˜Q = ∑
+u(xu + nu)
+and send a decryption request to the users to help him decrypt E. But, the aggregator can cheat and request
+the decryption of wrong values, for instance, the encrypted private value of a single user, in which case the
+users will be inadvertently decrypting the private value of that user. We discuss how to solve these challenges
+in Sec. 5.
+Putting the two together . Now we explain how FPA k and DLPA together give the complete solution.
+To answer a query sequence Q of n aggregate-sum queries, the aggregator ﬁrst uses FPA k to compute the
+k-length sequence Fk. Due to the linearity of the DFT transformation, Fk is another aggregate-sum query
+sequence. Now FPA k requires to perturb the answers of the query sequence Fk in order to get diﬀerential
+privacy. This is done by applying the DLPA algorithm on Fk. The end result of DLPA is that the aggregator
+gets a noisy diﬀerentially estimate ˜Fk of Fk(I). Then the aggregator computes the inverse DFT to reconstruct
+an estimate ˜Q from ˜Fk. The ﬁnal estimate ˜Q has error characteristics of the FPA k algorithm, but has been
+computed in a distributed way using DLPA.
+We discuss FPA k and DLPA in detail in next two sections.
+4 Fourier Perturbation Algorithm
+We nows describe in detail the FPA k algorithm for improving accuracy of query answers for long sequences.
+In this section, we assume a central trusted server: how to distribute the algorithm using DLPA was brieﬂy
+mentioned in the solution sketch and will be discussed in detail in Sec. 5. The FPA k algorithm is based on
+the Discrete Fourier Transform, which we review brieﬂy below.
+4.1 The Discrete Fourier Transform
+The DFT of a n-dimensional sequence X is a linear transform giving another n-dimensional sequence,
+DFT(X), with jth element given as: DFT( X)j = ∑n
+i=1 e
+2π√−1
+n jiXi. Similarly one can compute the Inverse
+DFT as IDFT( X)j = 1
+n
+∑n
+i=1 e
+2π√−1
+n jiXi. Furthermore, IDFT(DFT(X)) = X.
+Denote DFTk(X) as the ﬁrst k elements of DFT(X). The elements of DFTk(X) are called the Fourier
+coeﬃcients of the k lowest frequencies and they compactly represent the high-level trends in X. An ap-
+proximation X′ to X can be obtained from DFTk(X) as follows: Denoting P ADn(DFTk(X)) the sequence
+7
+
+
+--- PAGE 8 ---
+ 0
+ 50
+ 100
+ 150
+ 200
+ 250  500  750  1000 1250 1500 1750
+# of users with weight > 200
+Time (# of days since joining website)
+X (n=2000)
+X' (k=20)
+Figure 3: Reconstructed sequence X′ vs. original X
+Algorithm 4.1 FPAk(Inputs: sequence Q, parameter λ)
+1: Compute Fk = DFTk(Q(I)).
+2: Compute ˜Fk = LPA(Fk, λ)
+3: Return ˜Q = IDFT(P ADn( ˜Fk))
+of length n obtained by appending n − k zeros to DFTk(X), compute X′ = IDFT(P ADn(DFTk(X))).
+Obviously X′ may be diﬀerent form X as ignoring the last n − k Fourier coeﬃcients may introduce some
+error. We denote RE k
+i (X), short for reconstruction error at the ith position, to be the value |X′
+i − Xi|.
+Example 4.1. To give a sense of the reconstruction error, we consider a sequence X of length n = 2000
+representing the number of people with weight > 200 in a real dataset (more details in Section 7), counted once
+every day over 2000 days. Fig. 3 shows the reconstructed sequence, X′, using k = 20 DFT coeﬃcients along
+with the original sequence X. X shows the temporal trend in the # of overweight people in the dataset. As
+shown, X′ captures the trend accurately showing that the reconstruction error is small even when compressing
+from n = 2000 to k = 20 DFT coeﬃcients.
+4.2 The Algorithm
+FPAk is shown in Algorithm 4.1. It begins by computing a sequence Fk, comprising the ﬁrst k Fourier
+coeﬃcients in the DFT of Q(I). Then it perturbs Fk using the LPA algorithm with parameter λ to compute
+a noisy estimate ˜Fk. This perturbation is done to guarantee diﬀerential privacy. Finally, the algorithm
+computes the inverse DFT of P ADn( ˜Fk) to get ˜Q, an approximation to the original query answers Q(I).
+As with LPA, the parameter λ in FPAk needs to be adjusted in order to get ϵ-diﬀerential privacy. Since
+FPAk perturbs the sequence Fk, λ has to be calibrated according to the L1 sensitivity, ∆1(Fk), of Fk. Next
+we discuss the value of λ that makes FPA k(Q, λ) diﬀerentially private.
+Theorem 4.1. Denote Fk = DFTk(Q(I)) the ﬁrst k DFT coeﬃcients of Q(I). Then, (i) the L1 sensitivity,
+∆1(Fk), is at most
+√
+k times the L2 sensitivity, ∆2(Q), of Q, and (ii) FPA k(Q, λ) is ϵ-diﬀerentially private
+for λ =
+√
+k∆2(Q)/ϵ.
+Proof (i) holds since ∆ 2(Fk) ≤ ∆2(Q) (as the n Fourier coeﬃcients have the same L2 norm as Q, while Fk
+ignores the last n − k Fourier coeﬃcients), and ∆ 1(Fk) ≤
+√
+k∆2(Fk) (due to a standard inequality between
+the L1 and L2 norms of a sequence). (ii) follows since for λ =
+√
+k∆2(Q)/ϵ ≥ ∆1(Fk)/ϵ, ˜Fk = LP A(Fk, λ)
+computed in Step 2 is ϵ-diﬀerentially private, and ˜Q in step 3 is obtained using ˜Fk only.
+4.3 Analyzing accuracy
+Example 2.2 gives an instance of a n-length query sequence for which LPA results in an error of n/ϵ to
+each query answer, making the answers useless for a large n. Intuitively speaking, FPA k applies LPA on
+a length- k sequence. Hence the noise added during perturbation should be smaller. On the other hand,
+8
+
+
+--- PAGE 9 ---
+ignoring n − k DFT coeﬃcients in FPA k results in an additional (but often much smaller) reconstruction
+error. Below we formalize this argument to compare the errors for the two algorithms in greater detail.
+In general, LPA results in a large noise whenever the L1 sensitivity of the query sequence is high. We
+deﬁne below irreducible query sequences that have the worst-possible L1 sensitivity behavior.
+Deﬁnition 4.1 (Irreducible queries) . A query sequence Q = Q1, . . . ,Qn is irreducible if its L1 sensitivity,
+∆1(Q), is equal to the sum, ∑n
+i=1 ∆(Qi), of the sensitivities of its constituent queries Q i’s.
+For all sequences Q, ∆ 1(Q) ≤ ∑n
+i=1 ∆(Qi). Hence irreducible queries have the worst-possible L1 sensitiv-
+ities among all query sequences. Recurring queries over time-series data are often irreducible: one instance is
+the recurring query Q of Example 2.2. The improvement of FPA k over LPA is the most on irreducible query
+sequences (since LPA has the least accuracy for such queries). We compare the accuracies over irreducible
+queries below (note however that irreducibility is not required for FPA k).
+For simplicity, we assume W.L.O.G that the sensitivity ∆(Q i) = 1 for all Q i ∈ Q. If not, we can
+rescale the queries by deﬁning the sequence Q′ = {Q′
+1, . . . ,Q′
+n} given as Q ′
+i = Q i/∆(Qi). Then ∆(Q ′
+i) =
+∆(Qi/∆(Qi)) = ∆(Q i)/∆(Qi) = 1. Furthermore, Q(I) can be computed from Q′(I) by just multiplying
+with ∆(Q i) at the ith position. We call such sequences as normalized query sequences.
+With this simpliﬁcation, ∆ 1(Q) = n (as irreducibility means ∆ 1(Q) = ∑n
+i=1 ∆(Qi) = ∑n
+i=1 1 = n).
+Applying Theorem 2.2, we know that errori(LPA) = n/ϵ in each query Q i. On the other hand the following
+theorem shows the error of the FPA k algorithm. Recall that RE k
+i (Q(I)) is the reconstruction error for the
+ith query, Qi, caused by ignoring n − k DFT coeﬃcients of Q(I) and then computing the inverse DFT.
+Theorem 4.2. Fix λ =
+√
+k∆2(Q)/ϵ so that FPA k(Q, λ) is ϵ-diﬀerentially private. Then for all i ∈
+{1, . . . , n}, the errori(FPAk) is k/ϵ + REk
+i (Q(I)).
+Due to lack of space, the proof of the above theorem is deferred to the Appendix (Sec. A). The theorem
+shows that the error by FPA k for each query is k/ϵ + REk
+i (Q(I)), while we know that LPA yields an error of
+n/ϵ. Since the reconstruction error, RE k
+i (Q(I)), is often small even for k << n , we expect the error in FPA k
+to be much smaller than in LPA. This hypothesis is conﬁrmed in our experiments that show that FPA k gives
+orders of magnitude improvement over LPA in terms of error.
+Choosing the Right k. So far we have assumed that k is known to us. Since errori(FPAk) is k/ϵ +
+REk
+i (Q(I)), a good value of k is important in obtaining a good trade-oﬀ between the perturbation error,
+k/ϵ, and the reconstruction error, RE k
+i (Q(I)). If k is too big, the perturbation error becomes too big (giving
+the performance of LPA), while if k is too small the reconstruction error becomes too high.
+We can often choose k based on prior assumptions about Q(I). For instance, if Q(I) is such that the
+Fourier coeﬃcients corresponding to Q(I) decrease exponentially fast, then only a constant number (say
+k=10) of Fourier coeﬃcients need to be retained during perturbation. Our experiments show that this naive
+method is applicable in many practical scenarios as Fourier coeﬃcients of many real-word sequences decrease
+very rapidly [1].
+However, for optimal performance, we need to adjust the value of k depending on the exact nature of
+Q(I). Computing k after looking at Q( I), however, compromises diﬀerential privacy. An algorithm to
+eﬃciently compute k in a diﬀerentially private way is described in Sec. 6.1.1.
+5 Distributed LPA (DLPA)
+In both LPA and FPA k, we assumed a trusted central server that stores the entire database I, computes
+the true answers Q( I), and adds noise for privacy. Next we discuss how to adapt these algorithms for the
+distributed setting, i.e. database I = I1 ∪ I2 . . . ∪ IU where Iu is the data of user u that she keeps to herself.
+We restrict ourselves to aggregate sum queries: 6 i.e. Q is such that Q( I) = ∑U
+u=1 fu(Iu) where fu is an
+arbitrary function that maps user u’s database Iu to numbers.
+6Note that FPA k itself is more general and can support arbitrary queries when used in a centralized setting.
+9
+
+
+--- PAGE 10 ---
+We ﬁrst construct the distributed LPA algorithm (DLPA for short) and then use it to construct distributed
+FPAk. As discussed in Sec. 2, our algorithms guarantee privacy even against a malicious aggregator and
+malicious users as long as a majority of honest users exist. For the utility of the aggregate estimate to be
+good, we assume that among the malicious users, there are no breakers and at most l liars.
+We explain DLPA over a single aggregate-sum query Q: the generalization to query sequences is straight-
+forward and just requires multiple invocation of the algorithm, once for each query in the sequence. In this
+section, we also make a simplifying assumption that there are no communication failures: all links between
+the users and aggregator are maintained throughout the time required to answer the query. We relax this
+assumption and discuss fault tolerance in Sec. 6.2.
+5.1 Basics: Encryption Scheme
+DLPA is built upon several cryptographic primitives. Before describing DLPA, we ﬁrst discuss the encryp-
+tion technique used in it: the threshold Paillier cryptosystem [10]. The cryptosystem is set up by choosing
+an integer m such that ( i) m = pq where p and q are strong primes (i.e p = 2p′ + 1 and q = 2q′ + 1), and (ii)
+gcd(m, φ(m)) = 1. Once m is chosen, any number in Zm (the set {0, 1, . . . , m− 1}) can be encrypted. Also
+denoteZ∗
+m the subset of numbers in Zm that have a multiplicative inverse modulo m (eg. 0 does not have
+an inverse, but 1 has).
+Key generation Choose a random element β ∈Z∗
+m and set λ = β × lcm(p, q). λ is the private key. Also
+set g = (1 + m)abm mod m 2 for some randomly chosen ( a, b) ∈Z∗
+m ×Z∗
+m. The triplet ( m, g, gλ) forms the
+public key.
+Encryption The encryption function Enc maps a plaintext message t ∈Zm to ciphertext c ∈Z∗
+m2 . Enc(t)
+is computed as gtrm mod m 2 where r ∈Z∗
+m is a randomly chosen number.
+Decryption Denote L the function L(u) = ( u − 1)/m for any u = 1 mod m . The decryption of ciphertext
+c ∈Z∗
+m2 is the function Dec(c) = L(cλ mod m 2)
+L(gλ mod m 2)
+The encryption scheme has the following properties.
+Homomorphic addition If ci is a ciphertext for message ti for i ∈ 1, 2, then c1 · c2 is a ciphertext for
+message t1 + t2.
+Distributed decryption Suppose the private key λ is shared by U users as λ = ∑
+u λu where λu is the
+private key for user u. Then decryption of a ciphertext c can be done distributedly (i.e. without any party
+knowing λ) as:
+• Each user u computes his decryption share cu = cλu .
+• The decryption shares are combined as c′ = ∏U
+u=1 cu.
+• Finally the decryption t = L(c′ mod m 2)
+L(gλ mod m 2) is computed.
+5.2 Protocol for Computing Exact Sum
+Let Q = ∑U
+u=1 fu(Iu) be the aggregate-sum query that we wish to answer. For simplicity of presentation, we
+assume fu returns numbers in the set {1, 2, . . . , l}: our techniques work for any ﬁnite D ⊆R. Denote xu =
+fu(Iu). Then Q = ∑U
+u=1 xu. We ﬁrst start with a protocol for computing Q at the aggregator exactly. We
+will subsequently enhance the protocol to include noise addition. As discussed in the solution sketch (Sec. 3),
+computing even exact sum is diﬃcult against a malicious aggregator: instead of the aggregator computing
+the encrypted sum and sending it to the users for decryption, it can send false decryption requests (say the
+encrypted private value of a single user) and break privacy.
+10
+
+
+--- PAGE 11 ---
+Algorithm 5.1 Encrypt-Sum(xu, ru)
+1: User u generates a random ru ∈Zm computes cu = Enc(xu + ru), and sends cu to the aggregator.
+2: The aggregator computes c = ∏U
+u=1 cu.
+We use the threshold Paillier scheme for the protocol. In a key generation phase, the private key λ
+is generated and distributed among the users as λ = ∑U
+i=u λu. Thus the users all together can perform
+distributed decryption using their keys λu. Note that since the key generation needs to be done only
+once (irrespective of the # of queries to be answered), expensive secret-sharing protocols [25] can be used
+for this purpose.
+The protocol executes in two phases. In the ﬁrst phase, the aggregator computes the required Q in
+encrypted form. Then in the second phase, a distributed decryption protocol is run to recover Q from the
+encrypted form.
+The ﬁrst phase is shown in Algorithm 5.1. We call it Encrypt-Sum( xu, ru): each user u encrypts his
+private value, xu, added to a randomly generated ru. Note that ru is known only to user u. The aggregator
+obtains all the encryptions and multiples them to compute c. Due to the homomorphic properties of the
+encryption, the obtained c is an encryption of ∑U
+u=1(xu + ru) = Q + ∑U
+u=1 ru. Since ru’s are not known to
+the aggregator, decrypting c would not reveal any information about Q. However, the following modiﬁcation
+of the distributed decryption protocol can be used to obtain Q exactly. Note that gλ is publicly known.
+Algorithm 5.2 Decrypt-Sum(c, ru)
+1: The aggregator sends c to each user u for decryption.
+2: User u computes decryption share c′
+u = cλu g−ruλ.
+3: The aggregator collects c′
+u from each user, combines them to get c′ = ∏U
+i=u c′
+u, and computes the ﬁnal
+decryption Q = L(c′ mod m 2)
+L(gλ mod m 2)
+The above protocol is a minor modiﬁcation of distributed decryption: user u multiplies an additional
+factor of g−ruλ while generating his decryption share (step 2). We call this protocol Decrypt-sum( c, ru). The
+following proposition shows the correctness of the protocol.
+Proposition 5.1. Let c = Encrypt-sum(xu, ru) and Q be the decryption computed by Decrypt-sum( c, ru).
+Then Q = Q = ∑U
+u=1 xu.
+Proof Sketch: The proof appears in the Appendix (Sec. B). Here we give a sketch. As mentioned earlier,
+c obtained from Encrypt-sum( xu, ru) is an encryption of Q + ∑U
+u=1 ru. Each user u corrects for his ru in
+Step 2 of Decrypt-sum( c, ru). Thus the ﬁnal Q obtained is equal to Q.
+Finally, we show that even though the Encrypt-sum and Decrypt-sum protocols can be used to compute
+the sum, ∑U
+u=1 xu, no other linear combinations can be computed. We saw that to compute the sum, the
+aggregator computed c = ∏
+u cu, where cu is the encryption received by the aggregator from user u in the
+Encrypt-sum protocol (Step 2). Next we show that virtually no other encryption computed from these cu’s
+can be decrypted in order to breach privacy.
+Theorem 5.1. Suppose that the aggregator runs Encrypt-sum( xu, ru) protocol followed by Decrypt-sum(c′, ru)
+protocol for some c′ of his choice. Let c′ = ∏U
+u=1 cau
+u (where cu are the encryptions sent by user u during
+Encrypt-sum protocol) such that au − 1 has an inverse mod m2 (which implies au ̸= 1 ) for some u. If the
+Decrypt-sum protocol decrypts c′ correctly to give ∑U
+u=1 auxu, then there exists an attacker that breaks the
+security of the original distributed Paillier cryptosystem.
+Proof Sketch: The formal proof of security is quite involved and appears in the Appendix (Sec. B): here we
+just highlight the intuition. Let c = Encrypt-sum( xu, ru). Suppose the aggregator runs Decrypt-sum( c′, ru)
+11
+
+
+--- PAGE 12 ---
+for c′ ̸= c, i.e. he sends wrong request for decryption, say the encryption of a single user’s data (i.e., au = 0
+for all users but one). In Step 2 of Decrypt-sum( c′, ru) protocol, other users will wrongly be correcting for
+their random ru’s that are not present in c′, making the decrypted value Q completely random and useless.
+5.3 Protocol for Computing Noisy Sum
+Now we describe how to add noise in the distributed setting. As mentioned earlier, LPA requires us to
+compute ˜Q = Q + Lap(λ) where Lap(λ) is a Laplace random variable with mean 0 and variance λ2. Denote
+N (µ, σ) to be a Gaussian random variable with mean µ and variance σ2. We shall generate Laplace noise
+using 4 Gaussian variables by exploiting the following property (proved in the Appendix (Sec. B)).
+Proposition 5.2. Let Yi ∼ N (0, λ) for i ∈ { 1, 2, 3, 4} be four Gaussian random variables. Then Z =
+Y 2
+1 + Y 2
+2 − Y 2
+3 − Y 2
+4 is a Lap(2λ2) random variable.
+The advantage of this decomposition is that Gaussian variables can be generated in a distributed fashion:
+To generate a N (0, λ) variable, each user can generate a N (0, λ/h) variable ( h = U/2 is a lower bound on
+the number of honest users, i.e. a honest majority exists) and then the sum of these h, N (0, λ/h), random
+variables gives the right N (0, λ) variable. However, to compute a Lap(λ) variable by Theorem 5.2, we need
+to compute squares of Gaussian random variables: for this we extend the Encrypt-Sum protocol described
+in the previous section to compute the encryption of ( ∑U
+u=1 yu)2 where yu is the private N (0, λ/h) of each
+user.
+The protocol requires two randomly generated private keys au, bu ∈ Zm for each user u. The keys bu
+are such that their sum for all users, ∑U
+u=1 bu, is 0. Denote a the sum ∑U
+u=1 au. Enc(a2) is computed and
+made public in a key generation phase. The keys au, bu need to be generated only once and expensive secret
+sharing protocols [25] can be used for this purpose. The protocol is shown below.
+Algorithm 5.3 Encrypt-Sum-Squared(yu, ru) Protocol
+1: User u computes cu = Enc(yu + au + bu) and sends it to the aggregator.
+2: The aggregator computes c = ∏U
+u=1 cu and sends it to each user u.
+3: Each user u generates a random ru ∈Zm, computes cu = cyu−au+bu Enc(ru).
+4: The aggregator collects cu from each user and computes c′ = (∏U
+u=1 cu)Enc(a2)
+We call the above protocol Encrypt-Sum-Squared( yu, ru). Due to the homomorphic properties of the
+encryption, the ﬁnal c obtained in Encrypt-Sum-Squared( yu, ru) can be shown to be an encryption of
+(∑
+u yu)2 + ∑
+u ru.
+Finally we can discuss the the noisy-sum protocol to add Lap(λ) noise. The protocol is shown in Algo-
+rithm 5.4 and is called Encrypt-Noisy-Sum( xu, ru): each user generates 4 Gaussian, N (0,
+√
+2λ/U ), random
+variables in Step 2. Each of these 4 Gaussian variable is used to generate an encryption of a N (0,
+√
+λ/2)
+Gaussian random variable in Step 3 using the Encrypt-Sum-Squared protocol. Then the user u generates an
+encryption for his private value xu using the Encrypt-Sum protocol in Step 4. The random variables ri
+u are
+generated so as to force the right encryption to be computed by the aggregator in Step 5: the aggregator can
+only compute c = c1c2c5
+c3c4 ; all others would have some ri
+u unbalanced. Due to the homomorphic properties of
+the encryption, the obtained c is an encryption of ∑
+u xu+(∑
+u y1
+u)2+(∑
+u y2
+u)2−(∑
+u y3
+u)2−(∑
+u y4
+u)2+∑
+u ru.
+Also this c can be decrypted using decrypt-sum( c, ru) protocol (Algorithm 5.2).
+Next we state theorems showing the privacy and utility of the protocol. Due to space constraints, the
+proofs are deferred to the Appendix (Sec. B).
+Theorem 5.2 (Privacy). Let c =Encrypt-Noisy-Sum(xu,ru) and ˜Q =decrypt-sum(c, ru). If there are at least
+U/2 honest users, then ˜Q = Q + Lap(λ)+Extra-Noise, where Lap(λ) is the noise generated by honest users
+and the Extra-Noise is that generated by malicious users. Thus for λ = ∆( Q)/ϵ, ϵ-diﬀerential privacy is
+guaranteed independent of what the malicious users and aggregator choose to do.
+12
+
+
+--- PAGE 13 ---
+Algorithm 5.4 Encrypt-Noisy-Sum(xu, ru)
+1: User u chooses ﬁve random numbers r1
+u, r2
+u, . . . , r5
+u fromZm and computes ru = r1
+u + r2
+u − r3
+u − r4
+u + r5
+u.
+2: User u generates four N (0,
+√
+2λ/U ) random variables y1
+u, . . . , y4
+u.
+3: Let cj =Encrypt-Sum-Squared(yj
+u, rj
+u) for j ∈ {1, 2, 3, 4}.
+4: Let c5 =Encrypt-Sum(xu, r5
+u)
+5: Aggregator computes c = c1c2c5
+c3c4 .
+Theorem 5.3 (Utility). Let c =Encrypt-Noisy-Sum(xu,ru) and ˜Q =decrypt-sum(c, ru). If there are no
+malicious users, then ˜Q = Q + Lap(2λ). Finally, in presence of l malicious users that are all liars and no
+breakers, ˜Q can deviate from Q + Lap(2λ) by at most l × ∆(Q).
+Distributed FP Ak. Above we discussed how to compute the perturbed estimate ˜Q for a single query Q. As
+mentioned earlier, extending distributed LPA for a n-length query sequence Q is straightforward: apply the
+Encrypt-Noisy-Sum protocol n times, once for each Q i ∈ Q. This works since LPA consists of n independent
+perturbations for each of the n queries in the sequence.
+Implementing FPA k over the distributed setting is slightly more involved. Each user u ﬁrst computes
+the answers of Q over his data Iu. We denote the answers as Q(Iu) = Q 1(Iu), . . . ,Qn(Iu). Next the user u
+computes the ﬁrst k DFT coeﬃcients of the answers Q(Iu). Let us denote these k DFT coeﬃcients by the
+sequence Fk(Iu). Recall that Fk(I) are the k DFT coeﬃcients of Q(I), where Q(I) are the answers of Q
+over the complete database I. By linearity of the DFT transform, we know that Fk(I) = ∑U
+u=1 Fk(Iu): thus
+Fk is another aggregate-sum query. Then distributed LPA can be used by the aggregator to compute the
+perturbed estimate ˜Fk for Fk(I). Finally, the aggregator takes the inverse DFT transform of ˜Fk to compute
+˜Q, a perturbed estimate of Q.
+6 Extensions
+We now describe two useful extensions of our algorithm. The ﬁrst extension enables us to choose a good
+value of the parameter k (# of DFT coeﬃcients used in FPA k) if a central trusted server exists, while the
+second extension allows us to tolerate failures of users during the execution of the DLPA algorithm.
+6.1 Choosing a Good Value of k
+So far we have assumed that the value k is known to us before executing FPA k. This was unavoidable in the
+distributed setting as each user needs to know k before computing his k DFT coeﬃcients Fk(Iu). However,
+assuming a central server holds all the data I, then the server can compute k depending on the exact nature
+of Q(I). Computing k after looking at Q(I), however, compromises diﬀerential privacy. We present here an
+algorithm to eﬃciently compute k in a diﬀerentially private way. This algorithm can be used instead of LPA
+to accurately answer long query sequences in the centralized setting.
+6.1.1 Diﬀerentially-private Sampling
+Denote F = DFT(Q(I)), and Fk (resp. Fn−k) the ﬁrst k (resp. last n − k) Fourier coeﬃcients in F. Next
+we discuss a sampling procedure that computes k and the perturbed diﬀerentially private estimate, ˜Fk, for
+the ﬁrst k Fourier coeﬃcients.
+Theorem 6.1. Denote U (k, ˜Fk) the function |Fn−k|2 +|˜Fk −Fk|2. Then sampling k and ˜Fk with probability
+proportional to e−U (k, ˜Fk)/λ satisﬁes ϵ-diﬀerential privacy for λ =
+√
+2∆2(Q)/ϵ.
+Theorem 6.1 (proved in the Appendix C.1) shows a diﬀerentially private way of sampling k and ˜Fk.
+However, the sampling may not be eﬃcient. This is because, even assuming that k has been sampled
+13
+
+
+--- PAGE 14 ---
+Algorithm 6.1 SPA(Inputs: Q (I), parameter λ)
+1: Compute F = DFT(Q(I))
+2: Denote U ′(k) the function |Fn−k|2 + k√n/ϵ.
+3: Sample a k ∈ {1, . . . , n}with probability ∝ e−U ′(k)/λ.
+4: Let g be a G(1/λ2, (k + 1)/2) random variable
+5: Compute ˜Fk = Fk + Nk(0, √g)
+6: Compute ˜Q = IDFT(P ADn( ˜Fk)).
+already, sampling ˜Fk needs to be done with probability proportional to e|˜Fk−Fk|2/λ. In other words, ˜Fk
+has to be sampled with probability based on its L2 distance with another sequence Fk. This is diﬃcult as
+now elements of the sequence ˜Fk cannot be sampled independently: if P r is the sampling distribution, then
+P r(˜F
+k
+i = x|˜F
+k
+j = y) ̸= P r(˜F
+k
+i = x). On the other hand, in FPA k, ˜Fk was generated independently by adding
+Lapk(λ) random variables to Fk. Nevertheless we discuss next an eﬃcient way to sample from U (k, ˜Fk).
+6.1.2 Sampling Perturbation Algorithm (SP A)
+Before giving the algorithm, we recall two kinds of random variables: (i) N (µ, Σ), that represents a normal
+random variable with mean µ and variance σ2 (additionally, denote Nk(µ, σ) a vector of k i.i.d normal
+variables), and (ii) G(θ, r), that represents a Gamma random variable with P DF given as 1
+Γ(r)θr xr−1e−r/θ,
+where θ > 0, and r > 0 are parameters, and Γ( .) is the gamma function. This PDF is similar to the
+exponential distribution except for an extra factor of xr−1.
+Our sampling-based perturbation algorithm (SPA) is shown in Algorithm 6.1. In the ﬁrst step it computes
+the entire DFT of Q. Then in steps 2 and 3, it samples a value of k. Intuitively speaking, U ′(k) =
+|Fn−k|2 + k√n/ϵ computed in the step 2 is the sum of the reconstruction error, |Fn−k|2 (this is the loss
+incurred by ignoring all elements in Fn−k), and the perturbation error, k√n/ϵ (an additional factor of √n
+appears as this is the perturbation error for the whole sequence). In step 3, those values of k are more likely
+to be picked that give a lower U ′(k), i.e. give a better tradeoﬀ between the reconstruction error and the
+perturbation error.
+Once k has been sampled, the algorithm continues to sample ˜Fk. This is done by ﬁrst picking a gamma
+random variable g in Step 4, and then perturbing Fk by adding Nk(0, √g) noise vector in Step 5. Even
+though, Nk represents a vector of k independent normal variables, the ˜Fk vector has not been generated in
+an independent fashion: g generated in Step 4 makes all elements of ˜Fk correlated (for instance if g is picked
+to be 0, then all ˜Fk = Fk). This makes sure that ˜Fk has been generated in the right way, conﬁrmed by the
+following theorem proved in the Appendix C.1.
+Theorem 6.2 (Privacy). SPA(Q, λ) is ϵ-diﬀerentially private for λ =
+√
+2∆2(Q)/ϵ.
+Finally, we show that it always makes sense to run our SPA algorithm as opposed to LPA. If Q is
+compressible, SPA will sample a good k << n decreasing the error signiﬁcantly (as conﬁrmed in our experi-
+ments). However, if Q is not compressible, the following theorem (proved in the Appendix C.1) shows that
+no matter what the total error of SPA would be at most a factor
+√
+2 log n times worse than LPA for any
+normalized irreducible query sequence 7 Q.
+Theorem 6.3 (Utility). Let Q be any normalized irreducible query sequence. Fix λ1 = ∆ 1(Q)/ϵ and
+λ2 =
+√
+2∆2(Q)/ϵ such that LPA (Q, λ1) and FPA k(Q, λ2) are ϵ-diﬀerentially private. Then error(SPA) ≤√
+2 · (log n) · error(LPA).
+7Recall that normalized query sequences have individual query sensitivities rescaled to 1 while irreducible sequences have
+L1 sensitivity equal to the sum of individual query sensitivities.
+14
+
+
+--- PAGE 15 ---
+6.2 Fault-tolerance
+Our distributed protocol has two phases. In the Encrypt-Noisy-Sum( xu, ru) phase, the aggregator computes
+an encryption c for the noisy sum of the private values, xu, and the random values, ru, of all users. Then in
+the Decrypt-Sum phase, all users need to correct for their respective random values ru. In addition, since the
+secret key λ is shared as the sum ∑U
+u=1 λu of the private keys λu’s, all users need to send their decryption
+shares in order to decrypt. This makes the protocol susceptible to failures: if a single user does not respond
+in the decrypt-sum phase, no decryption can be obtained.
+The solution is to (i) use a ( T, U )-threshold decryption [10] scheme in which any T valid decryption
+shares out of U possible ones can be used to decrypt, and (ii) instead of choosing a completely random
+ru ∈ Zm during the encrypt-sum protocol, a user chooses ru ∼ Lap(∆(Q)/ϵ), i.e. ru is chosen from the
+Laplace distribution suﬃcient for guaranteeing diﬀerential privacy. This ru is suﬃcient: to minimize noise
+the aggregator has an incentive for adding all users’ data when computing the aggregate encryption to be sent
+back for decryption, and leaving out a single user’s data results in a Laplace noise suﬃcient for diﬀerential
+privacy.
+Having seen the extensions still ensure privacy, let us see how they help in case of failures. Firstly, if f
+users fail to send their decryption shares, the ( T, U )-threshold property ensures that a decryption can still
+be computed as long as f < U − T . Furthermore, not using the decryption share of f users means that
+the random value ru of each of the f users is left uncorrected for, at the end of decryption. This results in
+an extra noise of f Lap (∆(Q)/ϵ) variables. It can be shown that the expected sum of of these f variables
+increases as √f ∆(Q)/ϵ. In other words, the noise increases as the square root of the number of user failures
+f as demonstrated in our experiments. As long as f is small, this behavior is acceptable. For a large f , the
+distributed protocol for computation of Q has to be repeated.
+Note that in the above solution, we are concerned about failures of users that happen after the ﬁrst phase
+and before the second phase of our protocol. Failures that happen before or after the complete execution
+of the protocol for a query do not aﬀect the accuracy of our protocol. Since execution of our protocol for a
+single query takes less than a few seconds in practice, failures within this small time window is rare and are
+of small size. In Section 7.4, we experimentally show that the impact of such failures is small.
+7 Experiments
+We have implemented our algorithms in Java, using the BigInteger library for cryptographic components of
+the algorithms. This section evaluates our prototype using a 2.8 GHz Intel Pentium PC with 1GB RAM.
+Data sets . We use three real data sets in our evaluation.
+• GPS: This is the GPS trace from Microsoft’s Multiperson Local Survey (MLS) project [18]. The GPS trace
+was collected from 253 voluntary drivers, mostly in the Seattle, Washington area, covering about 135,000
+kilometers of driving. The entire trace has approximately 2.3 million timestamped latitude/longitude points
+comprising about 16,000 discrete trips. The median interval between recorded points on a trip is 6 seconds
+and 62 meters. Thus, successive points on a trip are highly correlated.
+• W eight: This is trace of body weights, collected from an online weight-monitoring website 8. The trace
+contains daily weight data of about 300 users for a period of up to 5 years.
+• T raﬃc: This data, collected from Department of Transportation of San Antonio, Texas 9, reports volume
+and speed data at about 30 intersections in the city. We use a 6-months long trace, where data is reported
+once every 15 minutes.
+Queries. For evaluating utility, we consider the following 6 query sequences. The ﬁrst two queries are on
+the GPS data set, the next two queries are on the W eightdata set, and the last two queries are on the
+T raﬃcdataset.
+8http://www.hackersdata.com
+9http://www.transguide.dot.state.tx.us/
+15
+
+
+--- PAGE 16 ---
+100
+101
+102
+103
+104
+   G1    G2    W1    W2    T1    T2
+Percentage Error
+FPAk
+LPA
+Figure 4: Average errors of FPA k and LPA
+• Query G1: A query sequence whose value at each timestamp is an histogram over locations counting the
+number of people at each location. The locations are obtained by dividing the map into a 50 × 50 grid.
+The query sequence has 2000 diﬀerent timestamps spread uniformly over 2 weeks.
+• Query G2: The number of people at a ﬁxed location evaluated at 2000 diﬀerent timestamps spread uni-
+formly over 2 weeks.
+• Query W 1: Number of people with weight > 200 lb on each day for a total of 2000 days.
+• Query W 2: A query sequence whose value at each timestamp is the correlation coeﬃcient between two
+month-long time-series: (i) people with weight > 200 on day i of the month, and (ii) people with weight
+decreasing on day i of the month.
+• Query T 1 and Query T 2: Occupancy at two diﬀerent city intersections with an interval of 15 minutes for
+a total of 6 months.
+As the examples suggest, our algorithm can support a wide variety of queries. Unless otherwise stated, we
+use k = 30 for the FPA k algorithm and 1-diﬀerential privacy ( ϵ = 1) as the privacy requirement in our
+experiments.
+7.1 Accuracy of Answers
+We ﬁrst evaluate the accuracy of outputs of our FPA k algorithm and compare it with the LPA algorithm.
+We report error percentage of a sequence of output estimate, which is the total L2 error in the estimate (See
+Def. 2.3) normalized by the maximum possible L2 value of a query answer.
+Figure 4 reports the average error percentage of FPA k and LPA algorithms for the 6 query sequences.
+Average error percentage is computed as the average over 100 runs of each algorithm, the variance in
+the error percentages are represented by the error bars. As shown, FPA k has orders of magnitude better
+error percentage than LPA (graph shows y-axis using a log-scale). In fact, LPA has an error percentage
+≫ 100% showing that estimates obtained are completely meaningless. 10 On the other hand, FPA k has error
+percentages of < 20% that are mostly acceptable in practice.
+Figure 5 demonstrates the errors of both algorithms more visually. Fig 5(a) and (c) plot outputs of the
+FPAk algorithm along with the exact answers of W 1 and G2. Fig 5(b) and (d) plot the estimates obtained by
+LPA for the same two queries for the same privacy parameter. The graphs show that FPA k estimates follow
+the curve of the exact answer very closely, while LPA results in estimates that are practically meaningless.
+7.2 Eﬀect of DFT Parameters
+V alue of k. To understand the impact of k on the accuracy of FPA k, we vary the value of k in evaluating the
+query W 1. Fig. 6(a) demonstrates the results. It shows that as k increases the total error decreases at ﬁrst,
+then reaches a minimum, and ﬁnally increases. This is because the total error of FPA k is a combination of
+10Laplace noise can send query answers outside their range making the error > 100%. Truncation at range boundaries can
+make error = 100%, but is not done here to reﬂect the true magnitude of the noise.
+16
+
+
+--- PAGE 17 ---
+ 40
+ 50
+ 60
+ 70
+ 80
+ 90
+ 100
+ 110
+ 120
+ 200  600  1000  1400  1800
+# of users in a location
+Time (interval of 15 minutes)
+Exact answer
+FPAk output
+-2000
+-1000
+ 0
+ 1000
+ 2000
+ 200  600  1000  1400  1800
+# of users in a location
+Time (interval of 15 minutes)
+ 0
+ 50
+ 100
+ 150
+ 200
+ 250
+ 300
+ 200  600  1000  1400  1800
+# users with weight > 200
+Time (# of days since beginning)
+Exact answer
+Perturbed answer
+-4000
+-2000
+ 0
+ 2000
+ 4000
+ 200  600  1000  1400  1800
+# users with weight > 200
+Time (# of days since beginning)
+(a) G2 output with FPA k (b) G2 output with LPA (c) W 1 output with FPA k (d) W 1 output with LPA
+Figure 5: Point-wise errors of FPA k and LPA over time
+ 0
+ 10
+ 20
+ 30
+ 40
+ 50
+ 0  10  20  30  40  50  60  70  80
+Average Error (absolute)
+k
+Total Error
+Reconstruction Error
+SPA
+ 0
+ 5
+ 10
+ 15
+ 20
+ 25
+ 30
+ 35
+ 40
+ 45
+   G1    G2   W1   W2    T1    T2
+Percentage Error
+First-k
+Top-k
+(a) FPAk with diﬀerent k (b) First vs. Top k coeﬃcients
+Figure 6: Eﬀect of DFT parameters
+reconstruction error and perturbation error. Reconstruction error decreases with increasing values of k (also
+shown in Figure 6(a)), while perturbation error increases with increasing k. The total error is minimized
+for an optimal value of k that ﬁnds a sweet spot between these two types of errors. This highlights the
+importance of choosing a good value of k for FPAk.
+In the distributed case, there is no way to choose the best k by looking at query answers. Thus k has to
+be predetermined, which is the reason we used a ﬁxed value of k = 30 in our previous experiments (and it
+worked reasonably well for all queries). However the graph shows that for the W 1 query, k = 10 would have
+given a better trade-oﬀ, and the results of FPA k would have been better if we used k = 10. In a centralized
+setting, our sampling perturbation algorithm (SPA) can be used to privately sample the value of k. The
+error for that algorithm is also shown in the ﬁgure by the horizontal line and it is quite near the optimal
+error for k = 10.
+First-k vs. T op- k DFT coeﬃcients . Our algorithms, both FPA k and SPA, choose the ﬁrst k DFT
+coeﬃcients, for a given value of k. The choice of leading coeﬃcients is unavoidable in a distributed setting
+since all the users need to pick the same k DFT coeﬃcients for our algorithms to work. Even in the presence of
+the centralized server, choosing the best set of k DFT coeﬃcients in a diﬀerentially private way is ineﬃcient.
+However, if possible, it is always better to choose the k largest DFT coeﬃcients (i.e., top- k coeﬃcients), since
+they give lower reconstruction error than the ﬁrst- k coeﬃcients. This leads to the natural question: how
+much do we sacriﬁce in accuracy for using the ﬁrst- k DFT coeﬃcients (which gives us diﬀerential privacy)
+instead of using the top- k coeﬃcients (which does not give diﬀerential privacy)?
+Figure 6(b) answers the above question. It shows the errors of FPA k for diﬀerent queries and compares
+it with the errors of a hypothetical algorithm that uses the top- k DFT coeﬃcients (but may not necessarily
+be diﬀerentially private). Both the algorithms use k = 30 coeﬃcients. The graph shows (with a linear
+scale for y-axis) that we do not loose much even if we just pick the ﬁrst k coeﬃcients (indicating that they
+generally are the largest coeﬃcients). A substantial diﬀerence occurs only in T 1 and T 2 queries since they
+have periodic behavior at slightly higher frequencies indicating there largest coeﬃcients are not the ﬁrst k.
+Even for these queries, the diﬀerence is less than 5%.
+17
+
+
+--- PAGE 18 ---
+ 0
+ 100
+ 200
+ 300
+ 400
+ 500
+ 200  400  600  800  1000
+Time (milliseconds)
+# of users
+User time
+Aggregator time
+ 0
+ 10
+ 20
+ 30
+ 0  2  4  6  8  10
+Percentage Error
+Percentage User Failures
+(a) Computation cost (b) Errors for user failures
+Figure 7: Evaluation of Distributed LPA
+7.3 Computation & Communication Overhead
+Fig. 7(a) shows the computational overhead of our algorithm for computing a single aggregate-sum query. The
+graph shows the computation times (averaged over 100 runs) at a user and at the aggregator, as a function
+of the number of users involved in the query. The average computation time at a user is independent of
+the number of users and remains nearly constant. On the other hand, the time required by the aggregator
+increases linearly with the number of users. In all cases, the computation overhead is quite small, most
+of which is spent for cryptographic operations. We have also measured the communication overhead of
+our prototype and found that the algorithm has a small overhead: 0 .5 Kb for each user (considering both
+incoming and outgoing messages) and 0 .5 Kb times the # of users for the aggregator.
+7.4 Eﬀect of Failures
+Fig. 7(b) shows the fault-tolerance behavior of our algorithm based on the extensions described in Sec. 6.2.
+The fault-tolerant algorithm is implemented and used to answer the W 1 query of length n = 2000 using
+k = 30 DFT coeﬃcients. We again report the percentage error: the total L2 error in the computed estimate
+normalized by the maximum L2 value of Q. The percentage user failure is the percentage of users who fail
+during the protocol.
+The graph shows that the error increases with the square root of the number of users failing and is quite
+reasonable with even say 5% failure rate. Note that the accuracy of our algorithm is aﬀected only by the
+failures that happen during execution of the algorithm to answer a query, which is typically less than a few
+seconds in a distributed system. Failure within this short time should be rare and small in size in practice.
+In a very rare occasion, if a large number of users fail during this small time window, the algorithm should
+be started from the beginning.
+8 Related Work
+Relational Data . Many approaches for relational data have been proposed that support formal deﬁnitions
+of privacy s.a. diﬀerential privacy [7, 15, 28], ρ1ρ2 breach [9], adversarial privacy [23, 24], etc. Among these,
+most relevant to our work are those that focus on query answering [7,15,28]. [7] proposes the LPA algorithm
+that adds independent Laplace noise to each query answer. The noise is calibrated according to the L1
+sensitivity. Recurring query sequences over time-series data have high L1 sensitivity ( O(n) for a n length
+sequence) and thus LPA does not accurately answer such queries.
+To improve accuracy of query answers under diﬀerential privacy, [28] focuses on range-count queries,
+i.e. count queries where the predicate on each attribute is a range. The main idea is to take a sequence
+of range-count queries that are disjoint and then perturb the entire Discrete Wavelet Transform of the
+sequence. Such disjoint range-count queries have a L1 sensitivity of O(1) and can be accurately answered
+using their technique. However the technique can not be used to answer recurring sequences over time-series
+data accurately, owing to their high L1 sensitivity.
+18
+
+
+--- PAGE 19 ---
+Another approach for answering query sequences accurately is proposed in [15], where constraints over
+the answers of multiple queries are exploited to improve accuracy. Usually no constraints exist over recurring
+query sequences and thus the method is largely inapplicable for time-series data.
+Distributed protocols . Many Secure Multiparty Computation (SMC) techniques have been proposed to
+evaluate functions securely over data from multiple users [12]. In general, such techniques are slow [29]
+and infeasible for practical scenarios. However, if the function to be evaluated is a sum function, then
+eﬃcient techniques using threshold homomorphic functions have been proposed [4, 13]. Such techniques
+often require a communication mechanism with a broadcast facility, or a mechanism enabling a user to verify
+the computation done by other users. This is not possible in our setting where the aggregator does all the
+computations and the users do not have enough resources to check whether those computations are correct.
+In addition, we need to compute noisy sum (in order to guarantee diﬀerential privacy) which is more diﬃcult
+than computing just the sum of the inputs. To the best of our knowledge, [6] is the only known technique
+that computes noisy sum. However, it uses expensive secret-sharing protocols leading to a computation load
+of O(U ) per user, where U is the number of users. This makes the technique infeasible for large U .
+T echniques for Time-series data. Most work on time-series data assume the centralized setting: a trusted
+server publishes an anonymized version of the data of all users and aggregate queries can then be run on
+the published data. [11] publishes data by adding a virtual user whose data is sampled from a public noise
+distribution. [22] works on a single time-series data by obtaining an orthonormal transform (s.a. DFT), then
+adding noise only to large coeﬃcients of the transform, and ﬁnally obtaining the inverse transform. The main
+diﬀerence between our technique and theirs is the lack of formal privacy guarantee. Techniques [11, 22] show
+privacy by protecting against speciﬁc attacks (s.a. linear least-square regression or linear ﬁltering in [22]),
+however no formal privacy guarantee (s.a diﬀerential privacy) is provided. Furthermore no distributed
+solution is discussed. Same holds for most works on location data privacy (See [19] and the references
+therein).
+9 Conclusion
+We have proposed novel algorithms to privately answer queries on distributed time-series data. Our ﬁrst
+algorithm FPAk can answer long query sequences over correlated time series data in a diﬀerentially private
+way. FPA k perturbs k DFT coeﬃcients of an answer sequence, thereby improving the accuracy for an
+n-length query sequence from Θ( n) of existing algorithms to roughly Θ( k), if the k DFT coeﬃcients can
+accurately reconstruct all the query answers. For achieving diﬀerential privacy in distributed setting, we
+propose DLPA algorithm that implements Laplace noise addition in a distributed way with O(1) complexity
+per user. Our experiments with three real data sets show that our solution improves accuracy of query
+answers by orders of magnitude and also scales well with a large number of users.
+Acknowledgements. We would like to thank Josh Benaloh, Melissa Chase, Seny Kamara, Frank McSherry,
+and Mariana Raykova for many helpful discussions. Eric Horvitz, John Krumm, and Paul Newson kindly
+gave us access to the GPS dataset.
+References
+[1] Agrawal, R., F aloutsos, C., and Swami, A. N. Eﬃcient similarity search in sequence databases.
+In FODO (1993).
+[2] Blaesild, P. The two-dimensional hyperbolic distribution and related distributions, with an applica-
+tion to johannsen’s bean data. In Biometrika, Vol. 68 (1981).
+[3] Blum, A., Dwork, C., McSherry, F., and Nissim, K. Practical privacy: The suLQ framework.
+In PODS (2005).
+19
+
+
+--- PAGE 20 ---
+[4] Cramer, R., Damgard, I., and Nielsen, J. B. Multiparty computation from threshold homomor-
+phic encryption. In EUROCRYPT (2001).
+[5] Dwork, C. Diﬀerential privacy: A survey of results. In TAMC (2008).
+[6] Dwork, C., Kenthapadi, K., McSherry, F., Mironov, I., and Naor, M. Our data, ourselves:
+Privacy via distributed noise generation. In EUROCRYPT (2006).
+[7] Dwork, C., McSherry, F., Nissim, K., and Smith, A. Calibrating noise to sensitivity in private
+data analysis. In TCC (2006).
+[8] Eisenman, S. B., Miluzzo, E., Lane, N. D., Peterson, R. A., Ahn, G.-S., and Campbell,
+A. T. The bikenet mobile sensing system for cyclist experience mapping. In ACM SenSys (2007).
+[9] Evfimievski, A., Gehrke, J., and Srikant, R. Limiting privacy breaches in privacy preserving
+data mining. In PODS (2003).
+[10] Fouque, P., Poupard, G., and Stern, J. Sharing decryption in the context of voting or lotteries.
+In FC: International Conference on Financial Cryptography (2000), LNCS, Springer-Verlag.
+[11] Ganti, R. K., Pham, N., Tsai, Y.-E., and Abdelzaher, T. F. PoolView: stream privacy for
+grassroots participatory sensing. In ACM SenSys (2008).
+[12] Goldreich, O. Secure multi-party computation.
+[13] Gritzalis, D. Secure electronic voting.
+[14] Guha, S., Reznichenko, A., Haddadi, H., and Francis, P. Serving ads from localhost for
+performance, privacy, and proﬁt. In HotNets (2009).
+[15] Hay, M., Rastogi, V., Miklau, G., and Suciu, D. Boosting the accuracy of diﬀerentially-private
+histograms through consistency. In VLDB 2010 .
+[16] Hull, B., Bychkovsky, V., Zhang, Y., Chen, K., Goraczko, M., Miu, A., Shih, E., Balakr-
+ishnan, H., and Madden, S. Cartel: a distributed mobile sensor computing system. In ACM SenSys
+(2006).
+[17] Jonhson, N., Kotz, S., and Balakrishnan, N. Continuous univariate distributions (second ed.,
+vol. 1, chapter 18).
+[18] Krumm, J. A survey of computational location privacy. Personal and Ubiquitous Computing, 2008
+(2008).
+[19] Krumm, J., and Horvitz, E. Predestination: Where do you want to go today? IEEE Computer
+(2007).
+[20] Machanavajjhala, A., Gehrke, J., Kifer, D., and Venkitasubramaniam, M. l-diversity:
+Privacy beyond k-anonymity. In ICDE (2006).
+[21] McSherry, F., and Talwar, K. Mechanism design via diﬀerential privacy. In FOCS (2007).
+[22] Papadimitriou, S., Li, F., Kollios, G., and Yu, P. S. Time series compressibility and privacy. In
+VLDB (2007).
+[23] Rastogi, V., Hay, M., Miklau, G., and Suciu, D. Relationship privacy: Output perturbation for
+queries with joins. In PODS 2009 .
+[24] Rastogi, V., Suciu, D., and Hong, S. The boundary between privacy and utility in data publishing.
+In VLDB (2007).
+20
+
+
+--- PAGE 21 ---
+[25] Shamir, A. How to share a secret. Communications of the ACM 22 , 11 (1979).
+[26] Shilton, Katie, B. J., Estrin, D., Govindan, R., , and Kang, J. Designing the personal data
+stream: Enabling participatory privacy in mobile personal sensing. In 37th Research Conference on
+Communication, Information and Internet Policy (TPRC) (2009).
+[27] Sweene, L. k-anonymity: A model for protecting privacy. International Journal of Uncertainty,
+Fuzziness and Knowledge-Based Systems (2002).
+[28] Xiao, X., W ang, G., and Gehrke, J. Diﬀerential privacy via wavelet transforms. In ICDE 2010 .
+[29] Yao, A. C.-C. Protocols for secure computations (extended abstract). In FOCS (1982).
+21
+
+
+--- PAGE 22 ---
+A Fourier Perturbation Algorithm (FPA k)
+In this section, we prove Theorem 4.2. We ﬁrst restate it below.
+Theorem (4.2). Fix λ =
+√
+k∆2(Q)/ϵ so that FPA k(Q, λ) is ϵ-diﬀerentially private. Then for all i ∈
+{1, . . . , n}, the errori(FPAk) is k/ϵ + REk
+i (Q(I)).
+Proof: Let ˜Q = FPAk(Q, λ) be the perturbed query responses {˜Q1, . . . , ˜Qn} returned by the FPA k algo-
+rithm. The variance and expected error in each ˜Qi is calculated below. Recall that ˜Qi is obtained by using
+the IDFT of the perturbed k DFT coeﬃcients ˜Fk.
+V ar( ˜Qi) =
+k∑
+j=1
+V ar(˜F
+k
+j )
+n2 = kλ2
+n2 = k(k∆2
+2(Q)/ϵ2)
+n2 = k2n2/ϵ2
+n2 = k2/ϵ2.
+The above holds because W.L.O.G, we assume ∆(Q i) = 1 for all i ∈ {1, . . . , n}, and thus ∆ 2
+2(Q) = n.
+Now, denoting µi =E ˜Qi and RE k
+i (Q(I)) the error obtained due to ignoring n − k Fourier coeﬃcients, we
+have:
+errori(FPAk) = E|˜Qi − Qi| ≤E|µi − Qi|+E|˜Qi − µi|= RE k
+i (Q(I)) +E|˜Qi − µi|
+≤ REk
+i (Q(I)) +
+√
+E|˜Qi − µi|2
+2 (By Jensens ′ inequality)
+= RE k
+i (Q(I)) +
+√
+V ar(Qi) = RE k
+i (Q(I)) + k/ϵ
+Hence proved.
+B Distributed Laplace Perturbation Algorithm (DLPA)
+B.1 Protocol for Exact Sum
+In this section, we give the proofs of Proposition 5.1 and Theorem 5.1. We ﬁrst restate Proposition 5.1
+below.
+Proposition (5.1). Let c = Encrypt-sum(xu, ru) and Q be the decryption computed by Decrypt-sum( c, ru).
+Then Q = Q = ∑U
+u=1 xu.
+Proof: Denote R = ∑U
+u=1 ru. Let c′ be the product of decryption shares obtained in Step 3 of Decrypt-
+sum(c, ru). Then, we know that:
+c′ =
+U∏
+u=1
+c′
+u =
+U∏
+u=1
+cλu g−ruλ = c
+∑U
+u=1 λu g−λ ∑U
+u=1 ru = cλg−λR (1)
+Since, c =Encrypt-sum(xu, ru), we know that c is an encryption of ∑U
+u=1(xu + ru) = Q + R. Hence,
+cλ = gλ(Q+R) mod m 2. From Eq (1), we know that c′ = cλg−λR, and hence doing multiplications in Zm2
+we have
+c′ = cλg−λR = gλ(Q+R)g−λR = gλQ
+Thus L(c′ mod m 2)
+L(gλ mod m 2) = λQ
+λ = Q. Hence proved.
+Next, we restate Theorem 5.1 and prove it.
+22
+
+
+--- PAGE 23 ---
+Theorem (5.1). Suppose that the aggregator runs Encrypt-sum( xu, ru) protocol followed by Decrypt-sum(c′, ru)
+protocol for some c′ of his choice. Let c′ = ∏U
+u=1 cau
+u (where cu are the encryptions sent by user u during
+Encrypt-sum protocol) such that au − 1 has an inverse mod m2 (which implies au ̸= 1 ) for some u. If the
+Decrypt-sum protocol decrypts c′ correctly to give ∑U
+u=1 auxu, then there exists an attacker that breaks the
+security of the original distributed Paillier cryptosystem.
+Proof: Recall that cu = Enc(xu + ru) is the encryption sent by the user u in the Encrypt-sum( xu,ru)
+protocol. Suppose the aggregator is able to decrypt an encryption ˜ c = ∏n
+i=1 cau
+u such that au − 1 has an
+inverse mod m2 some u ∈ {1, . . . , U}. W.L.O.G we assume that u is the last user U , i.e. aU ̸= 1. If this
+is possible, we show how this can be used by an attacker to break the security of the original distributed
+Paillier cryptosystem. More formally, we prove that if the attacker A1 exists then so does attacker A2.
+Attacker A1: Let cu = Enc(xu + ru) and ˜c = ∏U
+u=1 cau
+u where aU − 1 has an inverse mod m2. Given
+˜c′
+u = ˜cλu g−ruλ for u ∈ {1, . . . , U}, A1 can compute ∑U
+u=1 auxu.
+Attacker A2: Let ˆcu be an encryption of xu. Given ˆcu for u ∈ {1, . . . , U}and private key shares λu for
+u ∈ {1, . . . , U − 1}, A2 can compute ∑U
+u=1 auxu.
+Note that A2 only uses U − 1 decryption keys to decrypt. This should not be possible for a ( U, U)-
+threshold system in which the private key λ is unknown and distributed as ∑U
+u=1 λu. Now let us suppose
+attacker A1 exists. We describe below how A2 can use A1 to launch his attack.
+Algorithm B.1 A2’s simulation of A1
+1: A2 receives an encryption ˆcu = Enc(xu) for u ∈ {1, . . . , U}and U − 1 private key shares λ1, . . . , λU −1
+2: A2 generates U numbers r1, . . . , rU chosen uniformly at random from Zm.
+3: A2 computes ˜c = ∏U
+u=1( ˆcugru )au . Thus ˜c is an encryption of ∑U
+u=1 au(xu + ru).
+4: A2 generates U − 1 decryption shares as ˜c′
+u = ˜cλu g−λru for u = {1, . . . , U − 1}.
+5: A2 chooses r ∈Zm uniformly at random, and generates the U th decryption share as ˜c′
+u = ˜c− ∑U −1
+u=1 λu g−λr.
+6: A2 sends these shares ˜c′
+1, . . . ,˜c′
+U to A1 who computes ∑U
+u=1 auxU .
+Proof of correct simulation: Now we show that ˜c′
+1, . . . ,˜c′
+U are correct inputs to A1. It is easy to see that
+˜c is an encryption of ∑U
+u=1 au(xu + ru). Furthermore, ˜c′
+u for u ∈ 1, . . . , U − 1 have been generated correctly,
+i.e. exactly as generated in the Decrypt-sum protocol (Step 2). The only remaining share is ˜ c′
+U , which has
+been generated using only ˜ cλ1, . . . ,˜cλU −1 in the simulation above (as A2 does not know λU ) and thus may
+not be equal to ˜cλU g−λrU as required by the Decrypt-sum protocol. However we show that ˜ c′
+U generated in
+the above simulation is statistically indistinguishable from ˜ cλU g−λrU . Note that
+˜cλU g−λrU = ˜ cλ−∑U −1
+u=1 λu g−λrU = ˜c− ∑U −1
+u=1 λu ˜cλg−λrU
+= ˜ c− ∑U −1
+u=1 λu gλ(∑U
+u=1 au(xu+ru))g−λrU = ˜c− ∑U −1
+u=1 λu gλt+λ(aU −1)rU
+Here t = ∑U −1
+i=1 au(xu + ru). Also denote C = ˜c− ∑U −1
+u=1 λu . So from the above equations, we have ˜ cλU g−λrU =
+Cgλt+λ(aU −1)rU .
+Now we needed to show the indistinguishability of ˜ cλU g−λrU and ˜c′
+U . Thus we need to show indistin-
+guishability of Cgλt+λ(aU −1)rU and ˜c′
+U . As ˜c′
+U = ˜c− ∑U −1
+u=1 λu g−λr = Cg−λr in the above simulation, we need
+to show indistinguishability of Cg(λt+λ(aU −1)rU and Cg−λr.
+We show this in two steps. First we show the following lemma:
+Lemma B.1. For any rU and r′
+U inZm, let ˜c and ˜c′ be encryptions of t + aU (xU + rU ) and t + aU (xU + r′
+U ),
+respectively. Denote C = ˜c− ∑U −1
+u=1 λu and C′ = ˜c′−∑U −1
+u=1 λu . Then Cgλt+λ(aU −1)rU is indistinguishable from
+C′gλt+λ(aU −1)rU .
+Proof of Lemma: Suppose there exists a polynomial-time attacker B1 that can distinguish between
+Cgλt+λ(aU −1)rU and C′gλt+λ(aU −1)rU . Then we construct a polynomial-time attacker B2 that can break
+23
+
+
+--- PAGE 24 ---
+the original Paillier cryptosystem, i.e. distinguish between the encryptions of two messages m and m′. To
+construct B2 using B1, we will simply use m = t + aU (xU + rU ) and m′ = t + aU (xU + r′
+U ). Then ˜c and ˜c′ are
+the encryptions of m and m′ respectively. Then B2 will just compute C = ˜c− ∑U −1
+u=1 λu and C′ = ˜c′−∑U −1
+u=1 λu .
+Finally B2 will use B1 to distinguish between Cgλt+λ(aU −1)rU and C′gλt+λ(aU −1)rU . If B1 distinguishes
+them correctly, then B2 correctly distinguishes between m and m′. Hence proved.
+From Lemma B.1, we know that for arbitrary rU and r′
+U , Cgλt+λ(aU −1)rU and C′gλt+λ(aU −1)rU are
+indistinguishable (recall that C is a power of an encryption of t + aU (xU + rU ), while C′ is that of t +
+aU (xU + r′
+U )). In particular, if rU and r′
+U are both chosen uniformly at random, then Cgλt+λ(aU −1)rU
+and C′gλt+λ(aU −1)rU are indistinguishable. On switching rU and r′
+U (as they are both chosen uniformly at
+random) in C′gλt+λ(aU −1)rU , we get that C′gλt+λ(aU −1)rU is same as Cgλt+λ(aU −1)r′
+U . Thus Cgλt+λ(aU −1)rU
+and Cgλt+λ(aU −1)r′
+U are indistinguishable.
+Now denote r = −(t + (aU − 1)r′
+U ) mod m 2. If r′
+U is chosen uniformly at random from Zm and aU − 1
+has an inverse mod m2 (i.e., aU ̸= 1 and aU is not 1 mod p or 1 mod q ), then r also has uniform distribution
+inZm. Hence Cgλt+λ(aU −1)r′
+U and Cg−λr are indistinguishable. Finally, this gives that Cgλt+λ(aU −1)rU and
+Cg−λr are indistinguishable, yielding that ˜cu and ˜c′
+u are indistinguishable.
+B.2 Protocol for Computing Noisy Sum
+We give here the proofs of Proposition 5.2 and Theorems 5.2, and 5.3.
+Proposition (5.2). Let Yi ∼ N (0, λ) for i ∈ { 1, 2, 3, 4} be four Gaussian random variables. Then Z =
+Y 2
+1 + Y 2
+2 − Y 2
+3 − Y 2
+4 is a Lap(λ2/2) random variable.
+Proof: Denote Z1 = Y 2
+1 + Y 2
+2 and Z2 = Y 2
+3 + Y 2
+4 . Then Z1 and Z2 are chi-square distributions with k = 2
+degree of freedom, which is the same as a Exponential distribution with parameter 1 /(2λ2) (See [17]). Fur-
+thermore, if Z1 and Z2 follow exponential distributions then Z = Z1 − Z2 follows the Lap(2λ2) distribution.
+Hence Proved.
+Theorem (5.2). Let c =Encrypt-Noisy-Sum(xu,ru) and ˜Q =decrypt-sum(c, ru). If there are at least U/2
+honest users, then ˜Q = Q+Lap(λ)+Extra-Noise, where Lap(λ) is the noise generated by honest users and the
+Extra-Noise is that generated by malicious users. Thus for λ = ∆(Q)/ϵ, ϵ-diﬀerential privacy is guaranteed
+independent of what the malicious users and aggregator choose to do.
+Proof: Due to the homomorphic properties, the encryption c obtained from Encrypt-Noisy-Sum( xu,ru)
+is the encryption of ∑
+u xu + ( ∑
+u y1
+u)2 + ( ∑
+u y2
+u)2 − (∑
+u y3
+u)2 − (∑
+u y4
+u)2 + ∑
+u ru. W.L.O.G. assume
+that {1, . . . , U/2} is the set of U/2 honest users. Since honest users follow the protocol correctly, yi
+u is a
+N (0,
+√
+2λ/U ) random variable for i ∈ {1, 2, 3, 4}and u ∈ {1, . . . , U/2}. Thus, Yi = ∑U/2
+u=1 yi
+u are N (0,
+√
+λ/2)
+random variables for i ∈ { 1, 2, 3, 4}. Also since c is an encryption of ∑
+u xu + ( ∑
+u y1
+u)2 + ( ∑
+u y2
+u)2 −
+(∑
+u y3
+u)2 − (∑
+u y4
+u)2 + ∑
+u ru, it is an encryption of ∑
+u xu + Y 2
+1 + Y 2
+2 − Y 2
+3 − Y 2
+4 + ∑
+u ru+Extra-Noise,
+where Extra-noise are terms that contain the yi
+u for possibly malicious users u ∈ {U/2 + 1, . . . , U}. Thus c
+is an encryption of Q + Z + R+Extra-Noise, where Q = ∑
+u xu, Z = Y 2
+1 + Y 2
+2 − Y 2
+3 − Y 2
+4 , and R = ∑
+u ru.
+Finally, since Yi is a N (0,
+√
+λ/2) random variable, applying Proposition 5.2, we get Z is a Lap(λ) variable.
+Hence ˜Q =decrypt-sum(c, ru), the decryption of c, is Q + Lap(λ)+Extra-Noise.
+Theorem (5.3). Let c =Encrypt-Noisy-Sum(xu,ru) and ˜Q =decrypt-sum(c, ru). If there are no malicious
+users, then ˜Q = Q + Lap(2λ). Finally, in presence of l malicious users that are all liars and no breakers, ˜Q
+can deviate from Q + Lap(2λ) by at most l × ∆(Q).
+Proof: Denote Y ′
+i = ∑U
+u=1 yi
+u. If all users are honest, then c is an encryption of Q+ Z +R, where Q = ∑
+u xu,
+Z = Y ′2
+1 + Y ′2
+2 − Y ′2
+3 − Y ′2
+4 , and R = ∑
+u ru. Finally, since Y ′
+i is a N (0,
+√
+λ) random variable, applying
+Proposition 5.2, we get Z is a Lap(2λ) random variable. Hence ˜Q =decrypt-sum(c, ru), the decryption of c,
+is Q + Lap(2λ).
+24
+
+
+--- PAGE 25 ---
+In presence of l liars, the value of Q can be distorted by at most l × ∆(Q), since each user can lie and
+distort Q by at most its sensitivity. Also liars need to follow the protocol exactly, hence the noise will still
+be Lap(2λ). Thus the decrypted value ˜Q can deviate from Q + Lap(2λ) by at most l × ∆(Q).
+C Extensions
+C.1 Sampling Perturbation Algorithm
+We give here the proofs of Theorems 6.1, 6.2, and 6.3.
+Theorem (6.1). Denote U (k, ˜Fk) the function |Fn−k|2+|˜Fk −Fk|2. Then sampling k and ˜Fk with probability
+proportional to e−U (k, ˜Fk)/λ satisﬁes ϵ-diﬀerential privacy for λ =
+√
+2∆2(Q)/ϵ.
+Proof: The proof of this theorem follows from the privacy of exponential mechanism [21]. The only require-
+ment is to show that the sensitivity of U (k, ˜Fk) = |Fn−k|2 + |˜Fk − Fk|2 is
+√
+2∆2(Q). This is evident since
+∆(|Fn−k|2 + |˜Fk − Fk|2) ≤ ∆(|Fn−k|2 + |Fk|2) ≤ ∆(
+√
+2|F|2) = ∆(
+√
+2|Q|2) ≤
+√
+2∆2(Q). Hence proved.
+Theorem (6.2). SPA(Q, λ) is ϵ-diﬀerentially private for λ =
+√
+2∆2(Q)/ϵ.
+Proof: Recall that U (k, ˜Fk) = |Fn−k|2 + |˜Fk − Fk|2. Denote P r(k0, ˜Fk
+0 ← U (k, ˜Fk)) the probability that
+k = k0 and ˜Fk = ˜Fk
+0 when sampling k and ˜Fk according to the function U (k, ˜Fk). Then P r(k0, ˜Fk
+0) =
+e−U (k0, ˜Fk
+0 )/λd ˜Fk, where, informally speaking, d ˜Fk denotes a inﬁnitesimally small change in ˜Fk. Denote ∞k
+the k-length vector with each element ∞. Denote Zk =
+∫ ∞k
+−∞k e−|˜Fk−Fk|/λd ˜Fk. Note that Zk is independent
+of Fk: the integral corresponding to Zk is invariant under translations in ˜Fk. Denote zk = log Zk.
+Deﬁne ¯U (k, ˜Fk) = U (k, ˜Fk) − zk + k√n/ϵ. Then ∆( ¯U (k, ˜Fk)) = ∆( U (k, ˜Fk)), which we know from
+Theorem 6.1 to be
+√
+2∆2(Q)/ϵ = λ. Finally, we show below that SPA( Q, λ) samples k and ˜Fk according to
+probability e− ¯U (k, ˜Fk)/λ and hence by exponential mechanism [21] satisﬁes ϵ-diﬀerential privacy.
+Firstly, note that P r(k ← ¯U (k, ˜Fk)) is proportional to e− ¯U (k, ˜Fk)/λ. Plugging in the value of ¯U (k, ˜Fk) from
+above, we get that the probability is proportional to as e(−U (k, ˜Fk)+zk−k√n/ϵ)/λ. Simplifying this expression,
+we get P r(k ← ¯U (k, ˜Fk)) is proportional to e−|Fn−k|2/λ · (−Zk) · ezk · e−k√n/(ϵλ), which is equal to e−U ′(k)/λ,
+as in step 3 of SPA algorithm.
+Finally, note that once k is ﬁxed, the probability P r( ˜Fk ← ¯U (k, ˜Fk)|k) is simply proportional to
+e|˜Fk−Fk|2/λ. Thus only thing we need to show is that the steps 4 and 5 of SPA compute an ˜Fk sampled
+with probability proportional to e|˜Fk−Fk|2/λ. This follows from the fact that the distribution proportional
+to e|˜Fk−Fk|2/λ corresponds to the multidimensional hyperbolic distribution, and steps 4 and 5 give a way of
+sampling from the distribution, as shown in [2]. Hence proved.
+Theorem (6.3). Let Q be any normalized irreducible query sequence. Fix λ1 = ∆ 1(Q)/ϵ and λ2 =√
+2∆2(Q)/ϵ such that LPA (Q, λ1) and FPA k(Q, λ2) are ϵ-diﬀerentially private. Then error(SPA) ≤
+√
+2 ·
+(log n) · error(LPA).
+Proof: Since Q is a normalized query sequence, ∆ 1(Q) = n. Then λ = ∆ 1(Q)/ϵ = n/ϵ and error(LPA) =
+n3/2/ϵ. Also if k is the value sampled by SPA, then error(SPA) is less than |Fn−k|+
+√
+2k√n/ϵ. In particular,
+for k = n, we have error(SPA) =
+√
+2error(LPA). Since SPA samples k with probability proportional to
+|Fn−k|+
+√
+2k√n/ϵ, it can be shown that expectation over k the value of |Fn−k|+
+√
+2k√n/ϵ can be no worse
+that (
+√
+2n√n/ϵ) log n =
+√
+2 · (log n) · error(LPA). Hence proved.
+25

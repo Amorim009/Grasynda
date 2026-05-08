@@ -1,9 +1,11 @@
 from utils.load_data.m3 import M3Dataset
+from utils.load_data.nn3 import NN3Dataset
 from utils.load_data.tourism import TourismDataset
 from utils.load_data.gluonts import GluontsDataset
 
 DATASETS = {
     'M3': M3Dataset,
+    'NN3': NN3Dataset,
     'Tourism': TourismDataset,
     'Gluonts': GluontsDataset,
 }
@@ -13,6 +15,7 @@ DATA_GROUPS = [
     ('Gluonts', 'm1_quarterly'),
     ('M3', 'Monthly'),
     ('M3', 'Quarterly'),
+    ('NN3', 'Monthly'),
     ('Tourism', 'Monthly'),
     ('Tourism', 'Quarterly'),
 ]

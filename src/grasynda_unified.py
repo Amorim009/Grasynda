@@ -33,14 +33,12 @@ class GrasyndaUnified(SemiSyntheticGenerator):
                  visibility_type: str = 'horizontal', # 'horizontal', 'natural'
                  apply_differentiation: bool = False, # For trend
                  ensemble_transitions: bool = False,
-                 ensemble_size: int = 5,
-                 robust: bool = False):
+                 ensemble_size: int = 5):
         
         super().__init__(alias='GrasyndaUnified')
         
         self.period = period
         self.n_quantiles = n_quantiles
-        self.robust = robust
         
         # Defaults
         self.components_to_model = components_to_model if components_to_model else ['remainder']
@@ -67,6 +65,29 @@ class GrasyndaUnified(SemiSyntheticGenerator):
         self.degree_distributions = {}
         self.degree_transitions = {}
         self.value_degree_map = {}
+
+    @staticmethod
+    def _build_safe_kde(vals: np.ndarray):
+        """
+        Build a 1D KDE only when the bin has enough variation.
+        Degenerate bins are common in fine-grained quantile partitions,
+        especially on short or low-variance series; in those cases we
+        fall back to bin resampling rather than injecting artificial noise.
+        """
+        vals = np.asarray(vals, dtype=float)
+        vals = vals[np.isfinite(vals)]
+
+        if vals.size <= 1:
+            return None
+        if np.unique(vals).size <= 1:
+            return None
+        if np.allclose(vals, vals[0]):
+            return None
+
+        try:
+            return gaussian_kde(vals)
+        except (np.linalg.LinAlgError, ValueError):
+            return None
 
     def _create_synthetic_ts(self, df: pd.DataFrame) -> Dict:
         """
@@ -102,7 +123,7 @@ class GrasyndaUnified(SemiSyntheticGenerator):
         df_ = df.copy()
         
         if not skip_decomposition:
-            df_ = self.decompose_tsd(df_, period=self.period, robust=self.robust)
+            df_ = self.decompose_tsd(df_, period=self.period)
         
         # Dictionary to store generated components
         synth_components = {}
@@ -186,13 +207,13 @@ class GrasyndaUnified(SemiSyntheticGenerator):
     # =========================================================================
     
     @staticmethod
-    def decompose_tsd(df: pd.DataFrame, period: int, robust: bool):
+    def decompose_tsd(df: pd.DataFrame, period: int):
         seasonal_components = []
         trend_components = []
         remainder_components = []
 
         for unique_id, group in df.groupby('unique_id'):
-            stl = STL(group['y'], period=period, robust=robust)
+            stl = STL(group['y'], period=period)
             result = stl.fit()
 
             seasonal_components.append(pd.DataFrame({
@@ -447,7 +468,7 @@ class GrasyndaUnified(SemiSyntheticGenerator):
                         'vals': vals,
                         'min': vals.min(),
                         'max': vals.max(),
-                        'kde': gaussian_kde(vals) if len(vals) > 1 and sampling_type == 'kde' else None
+                        'kde': self._build_safe_kde(vals) if sampling_type == 'kde' else None
                     }
                 else:
                     bin_props[q] = None

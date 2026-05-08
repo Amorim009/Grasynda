@@ -11,6 +11,7 @@ DS_MAPPER = {
     'Gluonts-m1_quarterly': 'M1-Q',
     'M3-Monthly': 'M3-M',
     'M3-Quarterly': 'M3-Q',
+    'NN3-Monthly': 'NN3-M',
     'Tourism-Monthly': 'T-M',
     'Tourism-Quarterly': 'T-Q',
 }

@@ -1,0 +1,15 @@
+Family,Method,Variant_Name,Epsilon,Forecasting_Model,Evaluation_Protocol,Utility_MASE,Time_Sec
+Baseline,OriginalBaseline,OriginalBaseline,,NHITS,TRTR_OriginalBaseline_TestOnReal,1.0480299276651153,40.76826351029532
+OtherAugmentation,Jittering,Jittering,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.0688461659376773,42.35792711802891
+OtherAugmentation,MagnitudeWarping,MagnitudeWarping,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.078106075627072,337.7291189602443
+OtherAugmentation,SeasonalMBB,SeasonalMBB,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.0786209121447443,40.432271889277864
+OtherAugmentation,TSMixup,TSMixup,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.091424980090182,41.12269752366202
+OtherAugmentation,Scaling,Scaling,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.1045839428927138,40.95406447138105
+Grasynda,Grasynda_Optimized,Grasynda_Optimized,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.1081308254809985,39.666766371045796
+OtherAugmentation,DBA,DBA,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.1109881276247175,40.4769241809845
+OtherAugmentation,TimeVAE,TimeVAE,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.2169277143055048,42.00478877340044
+OtherAugmentation,TimeWarping,TimeWarping,,NHITS,TSTR_TrainOnReleased_TestOnReal,1.2936471416216422,43.03915776525225
+AnonymizedOriginal,FPA,FPA_eps0.48,0.48,NHITS,TSTR_TrainOnReleased_TestOnReal,1.8682810646114902,40.91787951333182
+AnonymizedOriginal,FPA,FPA_eps24,24.0,NHITS,TSTR_TrainOnReleased_TestOnReal,1.9527033256675745,42.14535794939314
+AnonymizedOriginal,LPA,LPA_eps0.48,0.48,NHITS,TSTR_TrainOnReleased_TestOnReal,1.982457766486529,41.659721170152935
+AnonymizedOriginal,LPA,LPA_eps24,24.0,NHITS,TSTR_TrainOnReleased_TestOnReal,2.1236403877953944,42.43469364302499

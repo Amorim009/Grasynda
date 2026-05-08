@@ -1,0 +1,13 @@
+{
+  "created_at": "20260508_143514",
+  "manifest": "C:\\Users\\lhenr\\Desktop\\Grasynda\\assets\\results\\release_benchmark\\release_universal_grasynda_da_faithful_lpa_fpa_20260508\\release_manifest.csv",
+  "forecasting_models": [
+    "NHITS"
+  ],
+  "max_steps": 1000,
+  "epsilon_filter": [
+    0.48,
+    24.0
+  ],
+  "forecasting_protocol": "TSTR for released rows; TRTR only for OriginalBaseline"
+}

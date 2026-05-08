@@ -31,7 +31,7 @@ class M3Dataset(LoadDataset):
     }
 
     frequency_pd = {
-        'Quarterly': 'Q',
+        'Quarterly': 'QE',
         'Monthly': 'ME',
         'Yearly': 'Y',
     }
