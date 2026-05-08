@@ -53,7 +53,15 @@ FORECASTING_MODELS = [
 ]
 MAX_STEPS = 1000
 EPSILON_FILTER = [0.48, 24.0]
-OUTPUT_TAG = "forecasting_universal_grasynda_da_faithful_lpa_fpa_eps048_24_20260508"
+FAMILIES_TO_RUN = [
+    "Baseline",
+    "AnonymizedOriginal",
+]
+METHODS_TO_RUN = [
+    "OriginalBaseline",
+    "FPA",
+]
+OUTPUT_TAG = "forecasting_baseline_faithful_fpa_eps048_24_20260508"
 
 
 def normalize_ds_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -127,6 +135,10 @@ def main() -> None:
 
     manifest_path = os.path.abspath(MANIFEST_PATH)
     manifest = pd.read_csv(manifest_path)
+    if FAMILIES_TO_RUN:
+        manifest = manifest[manifest["Family"].isin(FAMILIES_TO_RUN)].copy()
+    if METHODS_TO_RUN:
+        manifest = manifest[manifest["Method"].isin(METHODS_TO_RUN)].copy()
     if EPSILON_FILTER is not None:
         epsilons = {float(value) for value in EPSILON_FILTER}
         non_anonymized_mask = manifest["Family"] != "AnonymizedOriginal"
@@ -134,6 +146,8 @@ def main() -> None:
         manifest = manifest[non_anonymized_mask | epsilon_mask].copy()
         if manifest.empty:
             raise ValueError(f"No rows remain after epsilon filter: {sorted(epsilons)}")
+    expected_rows = len(manifest)
+    print(f"Rows selected from manifest: {expected_rows}", flush=True)
 
     base_dir = os.path.dirname(os.path.dirname(manifest_path))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -149,6 +163,8 @@ def main() -> None:
                 "forecasting_models": FORECASTING_MODELS,
                 "max_steps": MAX_STEPS,
                 "epsilon_filter": EPSILON_FILTER,
+                "families_to_run": FAMILIES_TO_RUN,
+                "methods_to_run": METHODS_TO_RUN,
                 "forecasting_protocol": "TSTR for released rows; TRTR only for OriginalBaseline",
             },
             handle,
